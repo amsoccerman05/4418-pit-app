@@ -1,6 +1,6 @@
 # Production setup and verification
 
-Updated September 9, 2026 after the owner confirmed the migration and auth redirects. The Pit repository now has GitHub Actions Pages enabled, public Supabase build configuration supplied, and custom domain `pit.frc4418.org` configured. No production seed data, Inventory changes, or DNS changes were made. Application commit `e547b26020ad7649b6f959f0ba62a70f81c5ad3d` deployed successfully: [Actions run 34435046390](https://github.com/amsoccerman05/4418-pit-app/actions/runs/34435046390). Both check and deploy jobs passed. The owner added DNS; the CNAME now resolves correctly. HTTPS certificate provisioning remains pending.
+Updated September 10, 2026 after the owner confirmed the migration and auth redirects. The Pit repository now has GitHub Actions Pages enabled, public Supabase build configuration supplied, and custom domain `pit.frc4418.org` configured. No production seed data, Inventory changes, or DNS changes were made. Application commit `e547b26020ad7649b6f959f0ba62a70f81c5ad3d` deployed successfully: [Actions run 34435046390](https://github.com/amsoccerman05/4418-pit-app/actions/runs/34435046390). Both check and deploy jobs passed. The owner added DNS; the CNAME now resolves correctly. The custom-domain certificate is approved, HTTPS enforcement is enabled, and the secure site returns HTTP 200. HTTP redirects to HTTPS with status 301.
 
 ## Confirmed configuration
 
@@ -78,16 +78,20 @@ The owner added this DNS record, and it was verified through DNS:
 
 Do not include `https://` or `/4418-pit-app` in the target. Do not alter root, www, or inventory records. No DNS record was changed by this pass.
 
-The Pit repository's Pages source, build values, and custom domain are configured. Pushes to `main` run the verification and deployment workflow. The DNS record above is already present. The attempted `https_enforced=true` update returned “The certificate does not exist yet”; the Pages API reports `https_certificate: null` and `https_enforced: false`. A normal HTTPS request failed hostname certificate validation. Do not bypass certificate checks or sign in over HTTP. Once GitHub provisions the certificate, enable **Enforce HTTPS** in this repository’s Pages settings (or resume the deployment agent to recheck and enable it).
+The Pit repository's Pages source, build values, and custom domain are configured. Pushes to `main` run the verification and deployment workflow. The DNS record above is already present. On September 10, a single remove/re-add of only the Pit custom-domain setting restarted certificate provisioning, following GitHub’s documented troubleshooting procedure. The certificate is now approved for `pit.frc4418.org` (current expiry December 9, 2026), `https_enforced` is true, and a normal HTTPS request succeeds with certificate verification. HTTP redirects to HTTPS. No DNS or Inventory settings were changed by the agent.
+
+## Deployed browser verification
+
+`node scripts/smoke-deployed.mjs` passed against `https://pit.frc4418.org/` at all four requested widths. It verified the production sign-in form, presence of Supabase configuration, and isolated local-demo dashboard/battery layouts. Screenshots are saved under ignored `test-results/production/`. This script does not sign in or create production records, and therefore does not claim to verify live team profiles or realtime delivery.
 
 ## Still required before calling this production-ready
 
 1. Confirm realtime publication membership if cross-client delivery does not work; the migration is already applied.
 2. Auth redirect additions are owner-confirmed; preserve Inventory and localhost settings.
 3. Authenticated checks using existing active team accounts for the five roles, without sharing passwords or service-role keys in chat.
-4. DNS and deployment are verified. Wait for the custom-domain certificate, enable HTTPS, and verify the secure URL.
+4. DNS, deployment, the custom-domain certificate, HTTPS enforcement, and the secure URL are verified.
 5. Two signed-in client tests on the deployed app: a student reports an issue and another dashboard updates; a battery transition propagates to the other page/dashboard. Confirm these arrive through realtime, not merely the 20-second refresh fallback. Verify cleanup on logout.
 6. Mentor/admin creates real events and batteries manually. Test activation/completion, battery editing/retirement, student normal workflow, match labels, optional voltage, readiness and readonly/direct API denials using an owner-approved test plan. Do not automatically insert fake competition records.
-7. Repeat responsive and authenticated smoke tests against the deployed URL.
+7. Deployed public-page and isolated-demo responsive checks passed at 390/768/1280/1440px without page errors or horizontal overflow. Authenticated smoke tests remain outstanding.
 
 Sources: [GitHub custom subdomains](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site), [Supabase redirect allowlist](https://supabase.com/docs/guides/auth/redirect-urls).
