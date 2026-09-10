@@ -1,6 +1,6 @@
 # Production setup and verification
 
-Updated September 9, 2026 after the owner confirmed the migration and auth redirects. The Pit repository now has GitHub Actions Pages enabled, public Supabase build configuration supplied, and custom domain `pit.frc4418.org` configured. No production seed data, Inventory changes, or DNS changes were made. See the repository Actions tab for the latest deployment status.
+Updated September 9, 2026 after the owner confirmed the migration and auth redirects. The Pit repository now has GitHub Actions Pages enabled, public Supabase build configuration supplied, and custom domain `pit.frc4418.org` configured. No production seed data, Inventory changes, or DNS changes were made. Application commit `e547b26020ad7649b6f959f0ba62a70f81c5ad3d` deployed successfully: [Actions run 34435046390](https://github.com/amsoccerman05/4418-pit-app/actions/runs/34435046390). Both check and deploy jobs passed. The owner added DNS; the CNAME now resolves correctly. HTTPS certificate provisioning remains pending.
 
 ## Confirmed configuration
 
@@ -13,7 +13,7 @@ Updated September 9, 2026 after the owner confirmed the migration and auth redir
 
 ## Live Supabase findings
 
-All five Pit tables now reject anonymous reads with PostgreSQL permission code `42501`. The earlier missing-table responses were resolved by the owner's migration. Authenticated profiles, successful writes, and cross-client realtime delivery still need real test-account sessions; no authenticated credentials are committed or inferred from the public key.
+All five Pit tables and all six write RPCs reject anonymous access with PostgreSQL permission code `42501`; all 11 live anonymous checks passed. The earlier missing-table responses were resolved by the owner's migration. Authenticated profiles, successful writes, and cross-client realtime delivery still need real test-account sessions; no authenticated credentials are committed or inferred from the public key.
 
 Run `node scripts/verify-live-access.mjs` to repeat the live anonymous read/RPC checks. For existing test accounts, optionally create git-ignored `.env.live-test` with `PIT_TEST_<ROLE>_EMAIL` and `PIT_TEST_<ROLE>_PASSWORD`, where ROLE is READONLY, STUDENT, LEAD, ADMIN, or MENTOR. Never paste passwords into chat or commit that file. The script verifies the signed-in user's active shared profile, table reads, and forbidden RPCs using empty, non-insertable payloads. It does not create records, users, or change roles. Missing accounts are explicitly reported as NOT TESTED.
 
@@ -70,7 +70,7 @@ No additional RLS migration was identified from the local audit. Authenticated d
 
 Confirmed owner and Pages hostname: `amsoccerman05` / `amsoccerman05.github.io`.
 
-The exact DNS record to add when Pages is ready is:
+The owner added this DNS record, and it was verified through DNS:
 
 | Type  | Host  | Target                    |
 | ----- | ----- | ------------------------- |
@@ -78,14 +78,14 @@ The exact DNS record to add when Pages is ready is:
 
 Do not include `https://` or `/4418-pit-app` in the target. Do not alter root, www, or inventory records. No DNS record was changed by this pass.
 
-The Pit repository's Pages source, build values, and custom domain are configured. Pushes to `main` run the verification and deployment workflow. Add only the DNS record above when ready. GitHub provisions the certificate after domain validation. Enable **Enforce HTTPS** once available. A certificate for the custom domain requires DNS validation; do not use insecure workarounds.
+The Pit repository's Pages source, build values, and custom domain are configured. Pushes to `main` run the verification and deployment workflow. The DNS record above is already present. The attempted `https_enforced=true` update returned “The certificate does not exist yet”; the Pages API reports `https_certificate: null` and `https_enforced: false`. A normal HTTPS request failed hostname certificate validation. Do not bypass certificate checks or sign in over HTTP. Once GitHub provisions the certificate, enable **Enforce HTTPS** in this repository’s Pages settings (or resume the deployment agent to recheck and enable it).
 
 ## Still required before calling this production-ready
 
 1. Confirm realtime publication membership if cross-client delivery does not work; the migration is already applied.
 2. Auth redirect additions are owner-confirmed; preserve Inventory and localhost settings.
 3. Authenticated checks using existing active team accounts for the five roles, without sharing passwords or service-role keys in chat.
-4. Finish custom-domain DNS/certificate checks after the Pages deployment workflow succeeds.
+4. DNS and deployment are verified. Wait for the custom-domain certificate, enable HTTPS, and verify the secure URL.
 5. Two signed-in client tests on the deployed app: a student reports an issue and another dashboard updates; a battery transition propagates to the other page/dashboard. Confirm these arrive through realtime, not merely the 20-second refresh fallback. Verify cleanup on logout.
 6. Mentor/admin creates real events and batteries manually. Test activation/completion, battery editing/retirement, student normal workflow, match labels, optional voltage, readiness and readonly/direct API denials using an owner-approved test plan. Do not automatically insert fake competition records.
 7. Repeat responsive and authenticated smoke tests against the deployed URL.
