@@ -43,6 +43,8 @@ import {
   batteryMatch,
 } from "./model";
 import "./style.css";
+const teamEmblem = `${import.meta.env.BASE_URL}branding/4418-impulse-emblem.png`;
+const teamWordmark = `${import.meta.env.BASE_URL}branding/4418-impulse-wordmark.png`;
 type Page = "dashboard" | "issues" | "batteries" | "admin";
 type Modal =
   | { kind: "report" }
@@ -444,7 +446,9 @@ function App() {
       <aside className="sidebar">
         <Brand />
         <div className="workspace">
-          <span className="team-avatar">44</span>
+          <span className="team-avatar">
+            <img src={teamEmblem} alt="Team 4418 IMPULSE" />
+          </span>
           <div>
             Team workspace<small>FRC 4418 · IMPULSE</small>
           </div>
@@ -474,7 +478,9 @@ function App() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <ShieldCheck size={19} />
+          <span className="suite-wordmark">
+            <img src={teamWordmark} alt="IMPULSE — FRC Team 4418" />
+          </span>
           <p>
             Built for the pit.<small>Keep the robot moving.</small>
           </p>
@@ -498,27 +504,43 @@ function App() {
       </aside>
       <div className="app">
         <header className="topbar">
-          <span className="breadcrumb">
-            Team 4418 <span>/</span> Pit Operations
-          </span>
-          <span className="sync">
-            <span className="dot" />
-            {sync}
-          </span>
-          <button
-            className="icon-button"
-            aria-label="Refresh data"
-            onClick={() => void refresh()}
-          >
-            <RefreshCw size={17} />
-          </button>
-          <button
-            className="icon-button mobile-signout"
-            aria-label="Sign out"
-            onClick={() => void exit()}
-          >
-            <LogOut size={17} />
-          </button>
+          <div className="topbar-left">
+            <span className="breadcrumb">Workspace</span>
+            <ChevronRight size={14} />
+            <b>
+              {page === "dashboard"
+                ? "Dashboard"
+                : page === "issues"
+                  ? "Issues"
+                  : page === "batteries"
+                    ? "Batteries"
+                    : "Manage"}
+            </b>
+          </div>
+          <div className="topbar-right">
+            <span className="role-pill">{profile.role.toUpperCase()}</span>
+            <span className="sync">
+              <span className="dot" />
+              {sync}
+            </span>
+            <button
+              className="icon-button"
+              aria-label="Refresh data"
+              onClick={() => void refresh()}
+            >
+              <RefreshCw size={17} />
+            </button>
+            <button
+              className="icon-button mobile-signout"
+              aria-label="Sign out"
+              onClick={() => void exit()}
+            >
+              <LogOut size={17} />
+            </button>
+            <span className="suite-avatar">
+              <img src={teamEmblem} alt="Team 4418 IMPULSE" />
+            </span>
+          </div>
         </header>
         {demo && (
           <div className="demo-banner">
@@ -1174,10 +1196,10 @@ function Brand() {
   return (
     <div className="brand">
       <div className="brand-mark">
-        <Zap size={29} fill="currentColor" />
+        <img src={teamEmblem} alt="Team 4418 IMPULSE rocket logo" />
       </div>
       <div>
-        4418 <span>IMPULSE</span>
+        4418 <span>PIT OPERATIONS</span>
       </div>
     </div>
   );
