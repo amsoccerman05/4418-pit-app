@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createSuiteClient } from "./suite-auth";
 const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const configured = !!(url && key);
@@ -6,7 +6,7 @@ export let configError = "";
 export const supabase = (() => {
   if (!configured) return null;
   try {
-    return createClient(url, key, {
+    return createSuiteClient(url, key, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
