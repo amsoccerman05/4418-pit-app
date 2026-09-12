@@ -1,4 +1,4 @@
-import { SuiteSwitcher } from './SuiteSwitcher';
+import { SuiteHeader } from './SuiteHeader';
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -350,13 +350,13 @@ function App() {
   };
   if (!authReady)
     return (
-      <div className="login">
+      <><SuiteHeader app="Pit Operations" account={userId?<button onClick={()=>void exit()}>Sign out</button>:null}/><div className="login">
         <p>Connecting to Team 4418…</p>
-      </div>
+      </div></>
     );
   if (!profile)
     return (
-      <div className="login">
+      <><SuiteHeader app="Pit Operations" account={userId?<button onClick={()=>void exit()}>Sign out</button>:null}/><div className="login">
         <div className="login-card">
           <Brand />
           <div className="eyebrow">COMPETITION WORKSPACE</div>
@@ -379,7 +379,6 @@ function App() {
             <>
               <p>Signed in. Waiting for an active team profile.</p>
               <button onClick={() => void refresh()}>Retry</button>
-              <button onClick={() => void exit()}>Sign out</button>
             </>
           ) : configured && supabase ? (
             <Login />
@@ -406,7 +405,7 @@ function App() {
             Demo data stays in this browser. It is not live team data.
           </small>
         </div>
-      </div>
+      </div></>
     );
   const issue = data.issues.find(
     (i) => modal?.kind === "issue" && i.id === modal.id,
@@ -494,18 +493,11 @@ function App() {
             <strong>{profile.display_name}</strong>
             <small>{profile.role}</small>
           </div>
-          <button
-            className="icon-button"
-            aria-label="Sign out"
-            onClick={() => void exit()}
-          >
-            <LogOut size={18} />
-          </button>
+
         </div>
       </aside>
       <div className="app">
-        <header className="topbar">
-          <a className="suite-home" href="https://team.frc4418.org/">Team Hub / Home</a><SuiteSwitcher current="Pit Operations" /><div className="topbar-left">
+        <SuiteHeader app="Pit Operations" context={<div className="topbar-left">
             <span className="breadcrumb">Workspace</span>
             <ChevronRight size={14} />
             <b>
@@ -518,6 +510,7 @@ function App() {
                     : "Manage"}
             </b>
           </div>
+}>
           <div className="topbar-right">
             <span className="role-pill">{profile.role.toUpperCase()}</span>
             <span className="sync">
@@ -532,17 +525,17 @@ function App() {
               <RefreshCw size={17} />
             </button>
             <button
-              className="icon-button mobile-signout"
+              className="secondary mobile-signout"
               aria-label="Sign out"
               onClick={() => void exit()}
             >
-              <LogOut size={17} />
+              <LogOut size={17} /><span>Sign out</span>
             </button>
             <span className="suite-avatar">
               <img src={teamEmblem} alt="Team 4418 IMPULSE" />
             </span>
           </div>
-        </header>
+</SuiteHeader>
         {demo && (
           <div className="demo-banner">
             <strong>LOCAL DEMO</strong>
