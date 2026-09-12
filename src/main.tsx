@@ -1,3 +1,4 @@
+import {AuthSurface} from './AuthSurface';
 import { SuiteHeader } from './SuiteHeader';
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -348,65 +349,9 @@ function App() {
       if (result.error) setError(result.error.message);
     }
   };
-  if (!authReady)
-    return (
-      <><SuiteHeader app="Pit Operations" account={userId?<button onClick={()=>void exit()}>Sign out</button>:null}/><div className="login">
-        <p>Connecting to Team 4418…</p>
-      </div></>
-    );
-  if (!profile)
-    return (
-      <><SuiteHeader app="Pit Operations" account={userId?<button onClick={()=>void exit()}>Sign out</button>:null}/><div className="login">
-        <div className="login-card">
-          <Brand />
-          <div className="eyebrow">COMPETITION WORKSPACE</div>
-          <h1>
-            A ready robot.
-            <br />A ready pit.
-          </h1>
-          <p>
-            Track robot issues and keep every battery moving. Built for the
-            IMPULSE pit crew.
-          </p>
-          {(error || configError) && (
-            <div className="error" role="alert">
-              {error || configError}
-            </div>
-          )}
-          {loading ? (
-            <p>Loading your workspace…</p>
-          ) : userId ? (
-            <>
-              <p>Signed in. Waiting for an active team profile.</p>
-              <button onClick={() => void refresh()}>Retry</button>
-            </>
-          ) : configured && supabase ? (
-            <Login />
-          ) : (
-            <div className="setup">
-              <strong>Connect your team workspace</strong>
-              <p>
-                Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to the existing
-                Inventory project, then run the Pit migration. Setup steps are
-                in README.md.
-              </p>
-            </div>
-          )}
-          <button
-            className="secondary"
-            onClick={() => {
-              setError("");
-              setDemo(true);
-            }}
-          >
-            Explore local demo <ArrowRight size={17} />
-          </button>
-          <small>
-            Demo data stays in this browser. It is not live team data.
-          </small>
-        </div>
-      </div></>
-    );
+  if (!authReady)return <AuthSurface/>;
+  if(!userId&&!demo){const localDemo=import.meta.env.DEV&&new URLSearchParams(location.search).has('demo');return <AuthSurface redirect={!!supabase&&!localDemo}>{localDemo?<button onClick={()=>setDemo(true)}>Explore local demo</button>:!supabase?<><p role="alert">Unable to connect securely.</p><a href="https://team.frc4418.org/">Team sign in</a></>:undefined}</AuthSurface>;}
+  if(!profile)return <><SuiteHeader app="Pit Operations" onSignOut={()=>void exit()}/><section className="login-card"><p role={error?'alert':'status'}>{error||'Loading your account…'}</p><button onClick={()=>void refresh()}>Retry</button></section></>;
   const issue = data.issues.find(
     (i) => modal?.kind === "issue" && i.id === modal.id,
   );
@@ -443,17 +388,8 @@ function App() {
   );
   return (
     <>
+      <SuiteHeader app="Pit Operations" context={page==='dashboard'?'Dashboard':page==='issues'?'Issues':page==='batteries'?'Batteries':'Manage'} name={profile.display_name} onSignOut={()=>void exit()}/>
       <aside className="sidebar">
-        <Brand />
-        <div className="workspace">
-          <span className="team-avatar">
-            <img src={teamEmblem} alt="Team 4418 IMPULSE" />
-          </span>
-          <div>
-            Team workspace<small>FRC 4418 · IMPULSE</small>
-          </div>
-          <span className="dot" />
-        </div>
         <div className="nav-caption">PIT OPERATIONS</div>
         <nav>
           {(
@@ -497,45 +433,7 @@ function App() {
         </div>
       </aside>
       <div className="app">
-        <SuiteHeader app="Pit Operations" context={<div className="topbar-left">
-            <span className="breadcrumb">Workspace</span>
-            <ChevronRight size={14} />
-            <b>
-              {page === "dashboard"
-                ? "Dashboard"
-                : page === "issues"
-                  ? "Issues"
-                  : page === "batteries"
-                    ? "Batteries"
-                    : "Manage"}
-            </b>
-          </div>
-}>
-          <div className="topbar-right">
-            <span className="role-pill">{profile.role.toUpperCase()}</span>
-            <span className="sync">
-              <span className="dot" />
-              {sync}
-            </span>
-            <button
-              className="icon-button"
-              aria-label="Refresh data"
-              onClick={() => void refresh()}
-            >
-              <RefreshCw size={17} />
-            </button>
-            <button
-              className="secondary mobile-signout"
-              aria-label="Sign out"
-              onClick={() => void exit()}
-            >
-              <LogOut size={17} /><span>Sign out</span>
-            </button>
-            <span className="suite-avatar">
-              <img src={teamEmblem} alt="Team 4418 IMPULSE" />
-            </span>
-          </div>
-</SuiteHeader>
+        <div className="workspace-tools"><span>{sync}</span><button className="icon-button" aria-label="Refresh data" onClick={()=>void refresh()}><RefreshCw size={17}/></button></div>
         {demo && (
           <div className="demo-banner">
             <strong>LOCAL DEMO</strong>

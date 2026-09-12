@@ -1537,3 +1537,5 @@ a:focus-visible, button:focus-visible { outline-color: var(--suite-primary); }
 .danger, .badge.out, .error, .alert, .auth-error { color: var(--suite-danger); }
 .danger.badge, .badge.out, .error, .alert { background: var(--suite-danger-bg); }
 .info, .notice { color: var(--suite-primary); background: var(--suite-info-bg); }
+
+@media(min-width:761px){.sidebar{top:76px}}.workspace-tools{display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:8px 24px;color:#606060;font-size:12px}

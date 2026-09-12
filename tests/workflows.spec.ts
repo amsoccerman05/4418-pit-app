@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 async function demo(page: Page) {
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await page.getByRole("button", { name: "Explore local demo" }).click();
   await expect(
     page.getByRole("heading", { name: "Pit dashboard" }),

@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 test("visual review of issues, forms and empty states", async ({
   page,
 }, info) => {
-  await page.goto("/");
+  await page.goto("/?demo=1");
   await page.getByRole("button", { name: "Explore local demo" }).click();
   await page.evaluate(() => document.fonts.ready);
   const shot = async (name: string) => {
