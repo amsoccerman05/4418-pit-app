@@ -434,7 +434,7 @@ function App() {
       </aside>
       <div className="app">
         <div className="workspace-tools"><span>{sync}</span><button className="icon-button" aria-label="Refresh data" onClick={()=>void refresh()}><RefreshCw size={17}/></button></div>
-        {demo && (
+        {import.meta.env.DEV && demo && (
           <div className="demo-banner">
             <strong>LOCAL DEMO</strong>
             <span>Sample data · not connected to your team</span>
@@ -573,7 +573,7 @@ function App() {
                       {!active
                         ? "Waiting for event setup"
                         : open.length === 0
-                          ? "No unresolved issues reported."
+                          ? "Robot looks good — no open issues."
                           : "Readiness is based on unresolved issues."}
                     </span>
                     <Activity size={20} />
@@ -711,7 +711,7 @@ function App() {
                     <div className="empty">
                       <Check size={30} />
                       <strong>All clear in the pit</strong>
-                      <p>No unresolved issues for this event.</p>
+                      <p>No open issues for this event.</p>
                     </div>
                   )}
                 </section>
@@ -807,7 +807,7 @@ function App() {
                   ) : (
                     <div className="empty">
                       <Wrench size={30} />
-                      <strong>No issues to show</strong>
+                      <strong>No issues match this view</strong>
                       <p>Change your filters or report an issue.</p>
                     </div>
                   );
