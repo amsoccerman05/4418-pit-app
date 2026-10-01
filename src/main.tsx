@@ -514,7 +514,7 @@ function App() {
                     Add battery
                   </button>
                 )
-              : ["dashboard","issues"].includes(page) && canWork(profile) && (
+              : (page==="issues" || (page==="dashboard" && !competition.context?.config)) && canWork(profile) && (
                   <button
                     className="primary"
                     disabled={!active || busy}
