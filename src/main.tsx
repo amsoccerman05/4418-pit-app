@@ -1,3 +1,5 @@
+import {CompetitionWorkspace} from './competition/Workspace';
+import {useCompetition} from './competition/service';
 import {AuthSurface} from './AuthSurface';
 import { SuiteHeader } from './SuiteHeader';
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -47,9 +49,9 @@ import {
 import "./style.css";
 const teamEmblem = `${import.meta.env.BASE_URL}branding/4418-impulse-emblem.png`;
 const teamWordmark = `${import.meta.env.BASE_URL}branding/4418-impulse-wordmark.png`;
-type Page = "dashboard" | "issues" | "batteries" | "admin";
+type Page = "dashboard" | "matches" | "issues" | "batteries" | "checklists" | "admin";
 type Modal =
-  | { kind: "report" }
+  | { kind: "report"; matchId?: string }
   | { kind: "issue"; id: string }
   | { kind: "battery"; id: string }
   | {
@@ -192,6 +194,7 @@ function App() {
     [issueFilter, setIssueFilter] = useState("UNRESOLVED"),
     [batteryFilter, setBatteryFilter] = useState("ALL"),
     [search, setSearch] = useState("");
+  const competition = useCompetition(profile, data.events.find(e=>e.status==='active')?.id, demo, ['dashboard','matches','admin'].includes(page));
   const request = useRef(0);
   const authIdentity = useRef<string | null>(null);
   useEffect(() => {
@@ -351,7 +354,7 @@ function App() {
   };
   if (!authReady)return <AuthSurface/>;
   if(!userId&&!demo){const localDemo=import.meta.env.DEV&&new URLSearchParams(location.search).has('demo');return <AuthSurface redirect={!!supabase&&!localDemo}>{localDemo?<button onClick={()=>setDemo(true)}>Explore local demo</button>:!supabase?<><p role="alert">Unable to connect securely.</p><a href="https://team.frc4418.org/">Team sign in</a></>:undefined}</AuthSurface>;}
-  if(!profile)return <><SuiteHeader app="Pit Operations" onSignOut={()=>void exit()}/><section className="login-card"><p role={error?'alert':'status'}>{error||'Loading your account…'}</p><button onClick={()=>void refresh()}>Retry</button></section></>;
+  if(!profile)return <><SuiteHeader app="Competition Operations" onSignOut={()=>void exit()}/><section className="login-card"><p role={error?'alert':'status'}>{error||'Loading your account…'}</p><button onClick={()=>void refresh()}>Retry</button></section></>;
   const issue = data.issues.find(
     (i) => modal?.kind === "issue" && i.id === modal.id,
   );
@@ -388,16 +391,18 @@ function App() {
   );
   return (
     <>
-      <SuiteHeader app="Pit Operations" context={page==='dashboard'?'Dashboard':page==='issues'?'Issues':page==='batteries'?'Batteries':'Manage'} name={profile.display_name} onSignOut={()=>void exit()}/>
+      <SuiteHeader app="Competition Operations" context={page==='admin'?'Event':page} name={profile.display_name} onSignOut={()=>void exit()}/>
       <aside className="sidebar">
-        <div className="nav-caption">PIT OPERATIONS</div>
+        <div className="nav-caption">COMPETITION OPERATIONS</div>
         <nav>
           {(
             [
               ["dashboard", "Dashboard", LayoutDashboard],
-              ["issues", "Issues", Wrench],
+              ["matches", "Matches", Activity],
+              ["issues", "Robot / Issues", Wrench],
               ["batteries", "Batteries", BatteryIcon],
-              ...(isAdmin(profile) ? [["admin", "Manage", Settings]] : []),
+              ["checklists", "Checklists", Check],
+              ["admin", "Event", Settings],
             ] as const
           ).map(([p, label, Icon]) => (
             <button
@@ -475,15 +480,15 @@ function App() {
           )}
           <div className="page-heading">
             <div>
-              <div className="eyebrow">TEAM 4418 / PIT OPERATIONS</div>
+              <div className="eyebrow">TEAM 4418 / COMPETITION OPERATIONS</div>
               <h1>
                 {page === "dashboard"
-                  ? "Pit dashboard"
+                  ? "Competition dashboard"
                   : page === "issues"
                     ? "Issue log"
                     : page === "batteries"
                       ? "Battery tracking"
-                      : "Manage workspace"}
+                      : page === "matches" ? "Matches" : page === "checklists" ? "Checklists" : "Event"}
               </h1>
               <p>
                 {page === "dashboard"
@@ -509,7 +514,7 @@ function App() {
                     Add battery
                   </button>
                 )
-              : canWork(profile) && (
+              : ["dashboard","issues"].includes(page) && canWork(profile) && (
                   <button
                     className="primary"
                     disabled={!active || busy}
@@ -544,7 +549,9 @@ function App() {
               </span>
             )}
           </div>
-          {page === "dashboard" && (
+          {!demo && ['dashboard','matches','checklists','admin'].includes(page) && <CompetitionWorkspace page={page} competition={competition} data={data} profile={profile} go={go} report={matchId=>setModal({kind:'report',matchId})} openIssue={id=>setModal({kind:'issue',id})} batteryAction={id=>setModal({kind:'battery',id})}/>}
+          {demo && ['matches','checklists'].includes(page) && <section className="card"><p>Competition event feeds and shared checklists are available in the signed-in team workspace.</p></section>}
+          {page === "dashboard" && (demo || !competition.context?.config) && (
             <>
               <div className="readiness-grid">
                 <section
@@ -1023,7 +1030,7 @@ function App() {
               data={data}
               busy={busy}
               submit={(p) =>
-                save("report_issue", { ...p, event_id: active?.id })
+                modal.matchId ? competition.run("report_issue",{...p,match_id:modal.matchId}).then(async()=>{await refresh();setModal(null);return true;}).catch(()=>false) : save("report_issue", { ...p, event_id: active?.id })
               }
             />
           )}{" "}
@@ -1049,6 +1056,7 @@ function App() {
               submit={(p) => save("transition_battery", p)}
             />
           )}
+          {battery && modal.kind === "battery" && <div className="card"><strong>Matches assigned to this battery</strong>{competition.context?.matches.filter(m=>m.battery_id===battery.id).map(m=><p key={m.id}>{m.match_key}</p>)}</div>}
           {battery && modal.kind === "battery" && (
             <BatteryDetail
               battery={battery}
@@ -1091,7 +1099,7 @@ function Brand() {
         <img src={teamEmblem} alt="Team 4418 IMPULSE rocket logo" />
       </div>
       <div>
-        4418 <span>PIT OPERATIONS</span>
+        4418 <span>COMPETITION OPERATIONS</span>
       </div>
     </div>
   );

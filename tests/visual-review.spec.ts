@@ -17,7 +17,7 @@ test("visual review of issues, forms and empty states", async ({
   };
   await page
     .locator("nav")
-    .getByRole("button", { name: "Issues", exact: true })
+    .getByRole("button", { name: "Robot / Issues", exact: true })
     .click();
   await shot("issues-empty");
   await page.getByRole("button", { name: "Report issue", exact: true }).click();

@@ -3,7 +3,7 @@ async function demo(page: Page) {
   await page.goto("/?demo=1");
   await page.getByRole("button", { name: "Explore local demo" }).click();
   await expect(
-    page.getByRole("heading", { name: "Pit dashboard" }),
+    page.getByRole("heading", { name: "Competition dashboard" }),
   ).toBeVisible();
 }
 async function role(page: Page, r: string) {
@@ -186,7 +186,7 @@ test("admin manages events and batteries; completed issues stay accessible", asy
   await demo(page);
   await report(page, "Historical issue", "LOW");
   await role(page, "admin");
-  await nav(page, "Manage");
+  await nav(page, "Event");
   await page.getByRole("button", { name: "New event" }).click();
   await page.getByLabel("Event name *").fill("Next regional");
   await page.getByLabel("Start date *").fill("2027-04-01");
@@ -201,7 +201,7 @@ test("admin manages events and batteries; completed issues stay accessible", asy
   await expect(
     page.getByRole("heading", { name: "READY", exact: true }),
   ).toBeVisible();
-  await nav(page, "Issues");
+  await nav(page, "Robot / Issues");
   await page.getByLabel("Event", { exact: true }).selectOption("denver");
   await expect(
     page.getByRole("button", { name: /Historical issue/ }),
