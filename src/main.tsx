@@ -19,6 +19,7 @@ import {
   Settings,
   ShieldCheck,
   TriangleAlert,
+  UserRound,
   Wrench,
   X,
   Zap,
@@ -40,6 +41,7 @@ import {
   batteryStatuses,
   readiness,
   unresolved,
+  issueOwner,
   canWork,
   canManage,
   isAdmin,
@@ -187,11 +189,14 @@ function App() {
     [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(false),
     [error, setError] = useState(""),
+    [dataReadError, setDataReadError] = useState(""),
     [notice, setNotice] = useState(""),
     [sync, setSync] = useState("Connecting"),
-    [lastSync, setLastSync] = useState("");
+    [lastSync, setLastSync] = useState(""),
+    [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const [eventFilter, setEventFilter] = useState("active"),
     [issueFilter, setIssueFilter] = useState("UNRESOLVED"),
+    [ownerFilter, setOwnerFilter] = useState("ALL"),
     [batteryFilter, setBatteryFilter] = useState("ALL"),
     [search, setSearch] = useState("");
   const competition = useCompetition(profile, data.events.find(e=>e.status==='active')?.id, demo, ['dashboard','matches','admin'].includes(page));
@@ -207,6 +212,8 @@ function App() {
         authIdentity.current = nextId;
         setProfile(null);
         setData(emptyData());
+        setLastSyncAt(null);
+        setDataReadError("");
         setModal(null);
       }
       setUserId(nextId);
@@ -232,13 +239,17 @@ function App() {
       setProfile(p);
       setData(d);
       setLastSync(new Date().toLocaleTimeString());
+      setLastSyncAt(Date.now());
+      setDataReadError("");
     } catch (e) {
-      if (version === request.current)
-        setError(
+      if (version === request.current) {
+        const message =
           e instanceof Error
             ? e.message
-            : String((e as { message?: string }).message || e),
-        );
+            : String((e as { message?: string }).message || e);
+        setError(message);
+        setDataReadError(message);
+      }
     }
   }, [demo, role, userId]);
   useEffect(() => {
@@ -278,10 +289,12 @@ function App() {
       setError("");
       void refresh();
     };
-    const offline = () =>
-      setError(
-        "You are offline. Changes cannot be saved. Displayed data may be out of date.",
-      );
+    const offline = () => {
+      const message =
+        "You are offline. Changes cannot be saved. Displayed data may be out of date.";
+      setError(message);
+      setDataReadError(message);
+    };
     window.addEventListener("online", online);
     window.addEventListener("offline", offline);
     return () => {
@@ -338,6 +351,7 @@ function App() {
     if (p === "issues") {
       setEventFilter("active");
       setIssueFilter(filter || "UNRESOLVED");
+      setOwnerFilter("ALL");
     }
     if (p === "batteries") setBatteryFilter(filter || "ALL");
   };
@@ -346,6 +360,8 @@ function App() {
       setDemo(false);
       setProfile(null);
       setData(emptyData());
+      setLastSyncAt(null);
+      setDataReadError("");
       setModal(null);
     } else {
       const result = await supabase!.auth.signOut();
@@ -381,6 +397,12 @@ function App() {
           #{i.issue_number} · {i.subsystem}
           {i.discovered_match ? ` · ${i.discovered_match}` : ""}
         </small>
+        <span
+          className={`issue-owner${i.assigned_to == null ? " unassigned" : ""}`}
+        >
+          <UserRound size={13} aria-hidden="true" />
+          <span>Owner: {issueOwner(i, data.profiles)}</span>
+        </span>
       </span>
       <span className="issue-badges">
         <Badge value={i.severity} />
@@ -549,7 +571,7 @@ function App() {
               </span>
             )}
           </div>
-          {!demo && ['dashboard','matches','checklists','admin'].includes(page) && <CompetitionWorkspace page={page} competition={competition} data={data} profile={profile} go={go} report={matchId=>setModal({kind:'report',matchId})} openIssue={id=>setModal({kind:'issue',id})} batteryAction={id=>setModal({kind:'battery',id})}/>}
+          {!demo && ['dashboard','matches','checklists','admin'].includes(page) && <CompetitionWorkspace page={page} competition={competition} data={data} dataUpdatedAt={lastSyncAt} dataError={dataReadError} profile={profile} go={go} report={matchId=>setModal({kind:'report',matchId})} openIssue={id=>setModal({kind:'issue',id})} batteryAction={id=>setModal({kind:'battery',id})}/>}
           {demo && ['matches','checklists'].includes(page) && <section className="card"><p>Competition event feeds and shared checklists are available in the signed-in team workspace.</p></section>}
           {page === "dashboard" && (demo || !competition.context?.config) && (
             <>
@@ -787,6 +809,16 @@ function App() {
                     ]}
                   />
                 </Field>
+                <Field label="Owner">
+                  <select
+                    value={ownerFilter}
+                    onChange={(e) => setOwnerFilter(e.target.value)}
+                  >
+                    <option value="ALL">All owners</option>
+                    <option value="MINE">Mine</option>
+                    <option value="UNASSIGNED">Unassigned</option>
+                  </select>
+                </Field>
               </div>
               <section className="card">
                 {(() => {
@@ -804,6 +836,11 @@ function App() {
                             unresolved(i) &&
                             i.severity === "ROBOT DOWN") ||
                           i.status === issueFilter) &&
+                        (ownerFilter === "ALL" ||
+                          (ownerFilter === "MINE" &&
+                            i.assigned_to === profile.id) ||
+                          (ownerFilter === "UNASSIGNED" &&
+                            i.assigned_to == null)) &&
                         `${i.title} ${i.subsystem} ${i.issue_number}`
                           .toLowerCase()
                           .includes(search.toLowerCase()),
@@ -1279,6 +1316,12 @@ function IssueDetail({
           <Badge value={i.status} />
         </div>
         <p>{i.description}</p>
+        <p
+          className={`issue-owner${i.assigned_to == null ? " unassigned" : ""}`}
+        >
+          <UserRound size={14} aria-hidden="true" />
+          <span>Owner: {issueOwner(i, data.profiles)}</span>
+        </p>
         <small>
           {i.subsystem} · Reported by {name(i.reported_by)} ·{" "}
           {stamp(i.created_at)}
@@ -1310,7 +1353,9 @@ function IssueDetail({
             title: draft.title,
             severity: draft.severity,
             status: draft.status,
-            assigned_to: draft.assigned_to,
+            ...(draft.assigned_to !== i.assigned_to
+              ? { assigned_to: draft.assigned_to }
+              : {}),
             battery_id: draft.battery_id,
             root_cause: draft.root_cause,
             repair_notes: draft.repair_notes,
@@ -1348,11 +1393,19 @@ function IssueDetail({
                 onChange={(e) => patch("assigned_to", e.target.value || null)}
               >
                 <option value="">Unassigned</option>
+                {draft.assigned_to != null &&
+                  !data.profiles.some(
+                    (p) => p.id === draft.assigned_to && p.active,
+                  ) && (
+                    <option value={draft.assigned_to}>
+                      {issueOwner(draft, data.profiles)} (current owner)
+                    </option>
+                  )}
                 {data.profiles
                   .filter((p) => p.active)
                   .map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.display_name || "Team member"}
+                      {p.display_name?.trim() || "Assigned teammate"}
                     </option>
                   ))}
               </select>

@@ -115,6 +115,17 @@ export const isAdmin = (p: Profile) =>
   p.active && ["admin", "mentor"].includes(p.role);
 // Deferred remains unresolved, including HIGH / ROBOT DOWN safety blockers.
 export const unresolved = (i: Issue) => i.status !== "RESOLVED";
+// A missing profile must not turn an existing assignment into an unassigned issue.
+export function issueOwner(
+  issue: Pick<Issue, "assigned_to">,
+  profiles: readonly Pick<Profile, "id" | "display_name">[],
+): string {
+  if (issue.assigned_to == null) return "Unassigned";
+  return (
+    profiles.find((p) => p.id === issue.assigned_to)?.display_name?.trim() ||
+    "Assigned teammate"
+  );
+}
 export function readiness(issues: Issue[]) {
   return issues.some((i) => unresolved(i) && i.severity === "ROBOT DOWN")
     ? "NOT READY"
