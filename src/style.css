@@ -611,6 +611,25 @@ main {
   font-size: 12px;
   font-weight: 400;
 }
+.issue-owner {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin-top: 6px;
+  color: var(--suite-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.issue-owner > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.issue-owner.unassigned {
+  color: var(--color-text);
+  font-weight: 600;
+}
 .issue-badges {
   display: flex;
   flex-direction: column;

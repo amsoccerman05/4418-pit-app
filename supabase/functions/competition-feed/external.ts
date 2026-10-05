@@ -26,8 +26,8 @@ export function liveFor(m:Match,live:LiveMatch[]){
  return candidates.length===1?candidates[0]:null;
 }
 export const nextMatch=(matches:Match[])=>matches.find(m=>!m.completed&&!m.actual)??null;
-export function operationalReadiness(issues:{status:string;severity:string}[],items:{blocking:boolean;required:boolean;completed_at:string|null}[],hasPre:boolean){
- if(issues.some(i=>i.status!=='RESOLVED'&&i.severity==='ROBOT DOWN')||items.some(i=>i.blocking&&!i.completed_at))return 'NOT READY';
- if(!hasPre||items.some(i=>i.required&&!i.completed_at)||issues.some(i=>i.status!=='RESOLVED'&&i.severity==='HIGH'))return 'NEEDS ATTENTION';
+export function operationalReadiness(issues:{status:string;severity:string}[],items:{blocking:boolean;required:boolean;completed_at:string|null}[],hasPre:boolean,requirements:{hasNext?:boolean;battery?:'ready'|'attention'|'blocked';postPending?:boolean}={}){
+ if(requirements.battery==='blocked'||issues.some(i=>i.status!=='RESOLVED'&&i.severity==='ROBOT DOWN')||items.some(i=>i.blocking&&!i.completed_at))return 'NOT READY';
+ if((requirements.hasNext!==false&&!hasPre)||requirements.battery==='attention'||requirements.postPending||items.some(i=>i.required&&!i.completed_at)||issues.some(i=>i.status!=='RESOLVED'&&i.severity==='HIGH'))return 'NEEDS ATTENTION';
  return 'READY';
 }
