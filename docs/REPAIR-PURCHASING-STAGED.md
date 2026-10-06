@@ -16,7 +16,7 @@ This UI depends on the separately staged Finance migration `20261005235435_finan
 - `finance_repair_po_candidate({p_issue_id,p_po_id})`: one authorized preview and per-PO attach capability.
 - `finance_attach_repair_po({p_issue_id,p_po_id,p_expected_issue_updated_at,p_reason})`: explicit immutable attachment; returns updated authorized context.
 
-The frontend validates response shape and matching IDs. It sends the timestamp of the repair actually shown to the user, and refuses a preview that silently advances that stamp. Unknown mutation outcomes are not retried; refresh links before trying again. The database unique pair makes an explicitly repeated attachment a no-op while preserving the first actor/reason/time.
+The frontend binds each RPC to the reviewed account: it checks the returned session identity, pins the per-request token, and cancels the scope on account changes, unmount, or abandoned routes. Same-user token refresh remains supported. It validates response shape and matching IDs. It sends the timestamp of the repair actually shown to the user, and refuses a preview that silently advances that stamp. Unknown mutation outcomes are not retried; refresh links before trying again. The database unique pair makes an explicitly repeated attachment a no-op while preserving the first actor/reason/time.
 
 The server stores relationship audit data privately. It must not expose hidden PO counts, vendor, amount, requester, or status through a broad Pit feed. The UI does not read Finance tables directly and uses no privileged key.
 
