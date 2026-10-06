@@ -1,3 +1,6 @@
+import {issueRouteId,isIssueRoute,canDismissCompletedEditor} from './issue-route';
+import {PurchaseLinks} from './purchasing/PurchaseLinks';
+import type {PurchasingScope} from './purchasing/service';
 import {CompetitionWorkspace} from './competition/Workspace';
 import {useCompetition} from './competition/service';
 import {AuthSurface} from './AuthSurface';
@@ -200,6 +203,28 @@ function App() {
     [batteryFilter, setBatteryFilter] = useState("ALL"),
     [search, setSearch] = useState("");
   const competition = useCompetition(profile, data.events.find(e=>e.status==='active')?.id, demo, ['dashboard','matches','admin'].includes(page));
+  const appLive=useRef(true),accountRequests=useRef(new AbortController());
+  useEffect(()=>{appLive.current=true;if(accountRequests.current.signal.aborted)accountRequests.current=new AbortController();return()=>{appLive.current=false;accountRequests.current.abort();};},[]);
+  const modalIdentity=useRef<Modal>(modal);modalIdentity.current=modal;
+  const [issueHash,setIssueHash]=useState(()=>location.hash);
+  const appliedIssueRoute=useRef('');
+  useEffect(()=>{const changed=()=>setIssueHash(location.hash);window.addEventListener('hashchange',changed);return()=>window.removeEventListener('hashchange',changed);},[]);
+  const closeModal=()=>{
+    if(!appLive.current)return;
+    if(isIssueRoute(location.hash)){history.replaceState(null,'',`${location.pathname}${location.search}`);setIssueHash('');appliedIssueRoute.current='';}
+    setModal(null);
+  };
+  useEffect(()=>{
+    if(!profile||loading||!lastSyncAt||dataReadError)return;
+    const key=`${profile.id}:${issueHash}`;
+    if(!isIssueRoute(issueHash)){if(appliedIssueRoute.current){setModal(current=>current?.kind==='issue'?null:current);appliedIssueRoute.current='';}return;}
+    if(appliedIssueRoute.current===key)return;
+    appliedIssueRoute.current=key;
+    const id=issueRouteId(issueHash),linked=id?data.issues.find(item=>item.id===id):null;
+    setPage('issues');
+    if(linked){setError('');setModal({kind:'issue',id:linked.id});}
+    else{setModal(null);setError('This repair link is unavailable. Open Issues or ask a teammate to check the link.');}
+  },[issueHash,profile?.id,loading,lastSyncAt,dataReadError,data.issues]);
   const request = useRef(0);
   const authIdentity = useRef<string | null>(null);
   useEffect(() => {
@@ -209,6 +234,8 @@ function App() {
     } = supabase.auth.onAuthStateChange((_e, session) => {
       const nextId = session?.user.id || null;
       if (authIdentity.current !== nextId) {
+        accountRequests.current.abort();accountRequests.current=new AbortController();
+        appliedIssueRoute.current='';
         authIdentity.current = nextId;
         setProfile(null);
         setData(emptyData());
@@ -313,15 +340,19 @@ function App() {
     close = true,
   ) {
     if (!profile || busy) return false;
+    const savedModal=modalIdentity.current,savedHash=location.hash;
     setBusy(true);
     setError("");
     try {
       await mutate(demo, profile, action, p);
+      if(!appLive.current)return false;
       await refresh();
+      if(!appLive.current)return false;
       setNotice("Saved successfully");
-      if (close) setModal(null);
+      if (close&&canDismissCompletedEditor(savedModal,modalIdentity.current,savedHash,location.hash)) closeModal();
       return true;
     } catch (e) {
+      if(!appLive.current||!canDismissCompletedEditor(savedModal,modalIdentity.current,savedHash,location.hash))return false;
       setError(
         e instanceof Error
           ? e.message
@@ -329,7 +360,7 @@ function App() {
       );
       return false;
     } finally {
-      setBusy(false);
+      if(appLive.current)setBusy(false);
     }
   }
   useEffect(() => {
@@ -1053,7 +1084,7 @@ function App() {
                       : "New battery"
           }
           close={() => {
-            setModal(null);
+            closeModal();
             setError("");
           }}
         >
@@ -1075,6 +1106,8 @@ function App() {
             <IssueDetail
               key={issue.id}
               issue={issue}
+              demo={demo}
+              purchaseScope={{actorId:profile.id,signal:accountRequests.current.signal,isCurrent:()=>appLive.current&&authIdentity.current===profile.id&&canDismissCompletedEditor(modal,modalIdentity.current,issueHash,location.hash)}}
               data={data}
               profile={profile}
               busy={busy}
@@ -1290,6 +1323,8 @@ function Report({
 }
 function IssueDetail({
   issue: i,
+  demo,
+  purchaseScope,
   data,
   profile,
   busy,
@@ -1297,6 +1332,8 @@ function IssueDetail({
   submit,
 }: {
   issue: Issue;
+  demo: boolean;
+  purchaseScope: PurchasingScope;
   data: Data;
   profile: Profile;
   busy: boolean;
@@ -1450,6 +1487,7 @@ function IssueDetail({
           </p>
         )}
       </form>
+      <PurchaseLinks key={`${i.id}:${i.updated_at}:${demo}`} issueId={i.id} issueUpdatedAt={i.updated_at} editable={editable} demo={demo} busy={busy} scope={purchaseScope}/>
       <h3 className="history-heading">Issue history</h3>
       <div className="timeline">
         {data.issueEvents
