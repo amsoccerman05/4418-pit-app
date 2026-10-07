@@ -1,4 +1,4 @@
-import { expect, type Page, type Route } from "@playwright/test";
+import { expect, type Page, type Route, type TestInfo } from "@playwright/test";
 
 export const privateMarkers = [
   "Private pit repair",
@@ -229,6 +229,7 @@ export async function setupOffline(page: Page) {
       contentType: "application/javascript",
       body: `
       const callbacks = new Set(), channels = new Set();
+      let signOutGate = null, finishSignOut = null;
       let session = { user: { id: 'person' }, expires_at: Math.floor(Date.now() / 1000) + 3600, access_token: 'fixture-token-person' };
       const emitAuth = (event, id, expiresAt) => {
         session = id ? { user: { id }, expires_at: expiresAt ?? Math.floor(Date.now() / 1000) + 3600, access_token: 'fixture-token-' + id } : null;
@@ -236,6 +237,8 @@ export async function setupOffline(page: Page) {
       };
       window.__offlineFixture = {
         emitAuth,
+        pauseSignOut() { signOutGate = new Promise(resolve => { finishSignOut = resolve; }); },
+        finishSignOut() { finishSignOut?.(); signOutGate = null; finishSignOut = null; },
         emitRealtime(table = 'pit_events') { for (const channel of channels) for (const listener of channel.listeners) if (listener.table === table) listener.callback({}); },
       };
       const request = async (path, body, signal, headers) => {
@@ -257,7 +260,7 @@ export async function setupOffline(page: Page) {
         auth: {
           onAuthStateChange(callback) { callbacks.add(callback); queueMicrotask(() => callbacks.has(callback) && callback('INITIAL_SESSION', session)); return { data: { subscription: { unsubscribe() { callbacks.delete(callback); } } } }; },
           async getSession() { return { data: { session }, error: null }; },
-          async signOut() { emitAuth('SIGNED_OUT', null); return { error: null }; },
+          async signOut() { if (signOutGate) await signOutGate; emitAuth('SIGNED_OUT', null); return { error: null }; },
         },
         from(table) { return query('table/' + table, {}); },
         rpc(name, args) { return query('rpc/' + name, args); },
@@ -382,11 +385,13 @@ export async function setupOffline(page: Page) {
   };
 }
 
-export const navigate = (page: Page, name: string) =>
-  page
+export const navigate = (page: Page, name: string) => {
+  const label = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return page
     .locator(".sidebar nav")
-    .getByRole("button", { name, exact: true })
+    .getByRole("button", { name: new RegExp(`^${label}(?:\\s*\\d+)?$`) })
     .click();
+};
 
 export async function assertPrivateDataNotPersisted(page: Page) {
   const persisted = await page.evaluate(() =>
@@ -397,6 +402,31 @@ export async function assertPrivateDataNotPersisted(page: Page) {
     }),
   );
   for (const marker of privateMarkers) expect(persisted).not.toContain(marker);
+}
+
+export async function assertPrivateSnapshotCleared(page: Page) {
+  for (const marker of privateMarkers)
+    await expect(page.locator("body")).not.toContainText(marker);
+  await expect(
+    page.locator(".comp-next, .battery-card, .issue-row"),
+  ).toHaveCount(0);
+}
+
+/** Captures only this fixture's synthetic data after the relevant assertions. */
+export async function captureOfflineState(
+  page: Page,
+  testInfo: TestInfo,
+  name: string,
+  fullPage = true,
+) {
+  const path = testInfo.outputPath(`${name}-${testInfo.project.name}.png`);
+  await page.screenshot({
+    path,
+    fullPage,
+    animations: "disabled",
+    caret: "hide",
+  });
+  await testInfo.attach(name, { path, contentType: "image/png" });
 }
 
 export async function emitAuth(

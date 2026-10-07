@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import {
   assertPrivateDataNotPersisted,
+  assertPrivateSnapshotCleared,
+  captureOfflineState,
   emitAuth,
   navigate,
   refreshStorm,
@@ -25,6 +27,7 @@ test("loaded private pit data stays readable offline, disables writes and refres
   await expect(banner.locator("p").first()).toHaveText(lastLoaded!);
   await expect(page.locator(".comp-next")).toContainText("Q17");
   await expect(page.locator(".comp-readiness")).toContainText("VERIFY STATUS");
+  await captureOfflineState(page, test.info(), "offline-dashboard");
 
   await page
     .getByRole("button", { name: "Open pit display", exact: true })
@@ -36,6 +39,7 @@ test("loaded private pit data stays readable offline, disables writes and refres
   await expect(display).toContainText("Q17");
   await expect(display).toContainText("B01");
   await expect(display).toContainText("VERIFY STATUS");
+  await captureOfflineState(page, test.info(), "offline-pit-display", false);
   await page
     .getByRole("button", { name: "Close pit display", exact: true })
     .click();
@@ -50,6 +54,11 @@ test("loaded private pit data stays readable offline, disables writes and refres
   await expect(
     page.getByRole("button", { name: "Install on robot", exact: true }),
   ).toBeDisabled();
+  await captureOfflineState(
+    page,
+    test.info(),
+    "offline-battery-actions-disabled",
+  );
   await navigate(page, "Robot / Issues");
   await expect(
     page.getByRole("button", { name: /Private pit repair/ }),
@@ -69,6 +78,11 @@ test("loaded private pit data stays readable offline, disables writes and refres
   ).toBeDisabled();
   expect(fixture.writes()).toHaveLength(0);
   await assertPrivateDataNotPersisted(page);
+  await captureOfflineState(
+    page,
+    test.info(),
+    "offline-checklist-actions-disabled",
+  );
 
   fixture.data.pit_batteries[0].notes = "Fresh data after reconnect";
   fixture.context.items[0].completed_at = new Date().toISOString();
@@ -309,8 +323,18 @@ test("logging out clears the loaded snapshot even while an earlier read is unres
   const oldRead = fixture.holdNext("table/pit_batteries");
   await page.getByRole("button", { name: "Refresh data", exact: true }).click();
   await oldRead.started;
+  await page.evaluate(() => (window as any).__offlineFixture.pauseSignOut());
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await oldRead.release();
+  await expect(page.getByText("Signing out…", { exact: true })).toBeVisible();
+  await assertPrivateSnapshotCleared(page);
+  await assertPrivateDataNotPersisted(page);
+  await captureOfflineState(
+    page,
+    test.info(),
+    "logout-private-snapshot-cleared",
+  );
+  await page.evaluate(() => (window as any).__offlineFixture.finishSignOut());
   await expect(
     page.getByRole("heading", { name: "Competition dashboard", exact: true }),
   ).toHaveCount(0);
@@ -361,6 +385,12 @@ test("the loaded offline snapshot disappears when its one-hour session expires",
     page.getByText("Private crew member", { exact: true }),
   ).toHaveCount(0);
   await expect(page.locator(".comp-next")).toHaveCount(0);
+  await assertPrivateSnapshotCleared(page);
+  await captureOfflineState(
+    page,
+    test.info(),
+    "expired-session-private-snapshot-cleared",
+  );
 });
 
 test("a committed battery write with a lost response is never automatically replayed", async ({
