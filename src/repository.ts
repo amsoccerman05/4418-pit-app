@@ -1,4 +1,6 @@
 import { supabase } from "./client";
+import {scopedPitRpc,type PitScope} from "./pit-rpc";
+import {abortable, boundedRequest} from "./connection";
 import {
   type Data,
   type Profile,
@@ -9,16 +11,17 @@ import {
   isAdmin,
 } from "./model";
 import { readDemo, writeDemo } from "./demo";
-export async function fetchData(): Promise<Data> {
+export async function fetchData(signal?:AbortSignal): Promise<Data> {
+ return boundedRequest(async signal => {
   if (!supabase) throw new Error("Supabase is not configured.");
   async function all(table: string) {
     const rows: unknown[] = [];
     for (let offset = 0; ; offset += 1000) {
-      const { data, error } = await supabase!
+      const { data, error } = await abortable(supabase!
         .from(table)
         .select("*")
         .order("id")
-        .range(offset, offset + 999);
+        .range(offset, offset + 999), signal);
       if (error) throw error;
       rows.push(...data);
       if (data.length < 1000) return rows;
@@ -43,15 +46,18 @@ export async function fetchData(): Promise<Data> {
     issueEvents,
     profiles,
   } as Data;
+ }, signal);
 }
 export async function mutate(
   demo: boolean,
   profile: Profile,
   action: string,
   p: Record<string, unknown>,
+  scope?:PitScope,
 ): Promise<void> {
   if (!demo) {
-    const { error } = await supabase!.rpc(`pit_${action}`, { p });
+    if(!scope)throw new Error('Pit account scope required.');
+    const { error } = await scopedPitRpc(`pit_${action}`,{p},scope);
     if (error) throw error;
     return;
   }

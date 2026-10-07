@@ -1,3 +1,5 @@
+import {accessFailure,offlineNow,PIT_STALE_MS,PRIVATE_SNAPSHOT_MAX_AGE_MS,UNKNOWN_SAVE} from './connection';
+import {isStale} from './competition/feed-state';
 import {issueRouteId,isIssueRoute,canDismissCompletedEditor} from './issue-route';
 import {PurchaseLinks} from './purchasing/PurchaseLinks';
 import type {PurchasingScope} from './purchasing/service';
@@ -197,17 +199,27 @@ function App() {
     [sync, setSync] = useState("Connecting"),
     [lastSync, setLastSync] = useState(""),
     [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+  const [online,setOnline]=useState(!offlineNow()),[clockNow,setClockNow]=useState(Date.now()),[sessionGeneration,setSessionGeneration]=useState(0),[sessionExpiresAt,setSessionExpiresAt]=useState<number|null>(null),[uncertainSave,setUncertainSave]=useState(false);
+  const accessEpoch=useRef(0);
+  const request=useRef(0),authIdentity=useRef<string|null>(null),authAllowed=useRef(false),expiresAt=useRef<number|null>(null),saving=useRef(false);
+  const appLive=useRef(true),accountRequests=useRef(new AbortController());
+  useEffect(()=>{appLive.current=true;if(accountRequests.current.signal.aborted)accountRequests.current=new AbortController();return()=>{appLive.current=false;accountRequests.current.abort();};},[]);
+  const readPending=useRef<{version:number}|null>(null),appliedIssueRoute=useRef('');
+  const invalidateAccess=useCallback((message='Your access could not be verified. Sign in again to load pit data.')=>{
+    request.current++;authAllowed.current=false;appliedIssueRoute.current='';accountRequests.current.abort();accountRequests.current=new AbortController();
+    accessEpoch.current++;setSessionGeneration(accessEpoch.current);setProfile(null);setData(emptyData());setLastSyncAt(null);setLastSync('');setDataReadError('');setModal(null);setNotice('');setUncertainSave(false);setBusy(false);saving.current=false;setError(message);
+  },[]);
+  const pitReadOnly=!demo&&(!online||!!dataReadError||uncertainSave||isStale(lastSyncAt,clockNow,PIT_STALE_MS));
+  const writeBusy=busy||pitReadOnly;
   const [eventFilter, setEventFilter] = useState("active"),
     [issueFilter, setIssueFilter] = useState("UNRESOLVED"),
     [ownerFilter, setOwnerFilter] = useState("ALL"),
     [batteryFilter, setBatteryFilter] = useState("ALL"),
     [search, setSearch] = useState("");
-  const competition = useCompetition(profile, data.events.find(e=>e.status==='active')?.id, demo, ['dashboard','matches','admin'].includes(page));
-  const appLive=useRef(true),accountRequests=useRef(new AbortController());
-  useEffect(()=>{appLive.current=true;if(accountRequests.current.signal.aborted)accountRequests.current=new AbortController();return()=>{appLive.current=false;accountRequests.current.abort();};},[]);
+  const accessCurrent=useCallback(()=>demo||(sessionGeneration===accessEpoch.current&&authAllowed.current&&authIdentity.current===userId&&(!expiresAt.current||expiresAt.current>Date.now())),[demo,userId,sessionGeneration]);
+  const competition = useCompetition(profile, data.events.find(e=>e.status==='active')?.id, demo, ['dashboard','matches','admin'].includes(page),sessionGeneration,pitReadOnly,invalidateAccess,accessCurrent,accountRequests.current.signal);
   const modalIdentity=useRef<Modal>(modal);modalIdentity.current=modal;
   const [issueHash,setIssueHash]=useState(()=>location.hash);
-  const appliedIssueRoute=useRef('');
   useEffect(()=>{const changed=()=>setIssueHash(location.hash);window.addEventListener('hashchange',changed);return()=>window.removeEventListener('hashchange',changed);},[]);
   const closeModal=()=>{
     if(!appLive.current)return;
@@ -225,15 +237,18 @@ function App() {
     if(linked){setError('');setModal({kind:'issue',id:linked.id});}
     else{setModal(null);setError('This repair link is unavailable. Open Issues or ask a teammate to check the link.');}
   },[issueHash,profile?.id,loading,lastSyncAt,dataReadError,data.issues]);
-  const request = useRef(0);
-  const authIdentity = useRef<string | null>(null);
   useEffect(() => {
     if (!supabase) return;
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_e, session) => {
       const nextId = session?.user.id || null;
-      if (authIdentity.current !== nextId) {
+      expiresAt.current=session?.expires_at ? session.expires_at*1000 : null;
+      setSessionExpiresAt(expiresAt.current);
+      const allowed=!!nextId&&(!expiresAt.current||expiresAt.current>Date.now());
+      if (authIdentity.current !== nextId || !allowed) {
+        request.current++;
+        accessEpoch.current++;setSessionGeneration(accessEpoch.current);
         accountRequests.current.abort();accountRequests.current=new AbortController();
         appliedIssueRoute.current='';
         authIdentity.current = nextId;
@@ -241,48 +256,56 @@ function App() {
         setData(emptyData());
         setLastSyncAt(null);
         setDataReadError("");
+        setLastSync('');setNotice('');setError('');setBusy(false);saving.current=false;setUncertainSave(false);
         setModal(null);
       }
+      authAllowed.current=allowed;
       setUserId(nextId);
       setAuthReady(true);
     });
     return () => subscription.unsubscribe();
   }, []);
-  const refresh = useCallback(async () => {
-    const version = ++request.current;
+  useEffect(()=>{
+    if(demo||!sessionExpiresAt)return;
+    const expire=()=>invalidateAccess('Your session expired. Sign in again to load pit data.');
+    if(sessionExpiresAt<=Date.now()){expire();return;}
+    const timer=setTimeout(expire,Math.min(sessionExpiresAt-Date.now(),2147483647));return()=>clearTimeout(timer);
+  },[sessionExpiresAt,demo,invalidateAccess]);
+  useEffect(()=>{
+    const update=()=>setClockNow(Date.now());const timer=setInterval(update,5000);window.addEventListener('focus',update);
+    return()=>{clearInterval(timer);window.removeEventListener('focus',update);};
+  },[]);
+  useEffect(()=>{
+    if(!demo&&lastSyncAt&&clockNow-lastSyncAt>PRIVATE_SNAPSHOT_MAX_AGE_MS)invalidateAccess('The last loaded pit snapshot expired. Reconnect and sign in again.');
+  },[clockNow,lastSyncAt,demo,invalidateAccess]);
+  const refresh = useCallback(async (reviewAfterSave=false,supersede=false) => {
+    if(!demo&&(!userId||!authAllowed.current||authIdentity.current!==userId))return false;
+    if(!demo&&expiresAt.current&&expiresAt.current<=Date.now()){invalidateAccess('Your session expired. Sign in again to load pit data.');return false;}
+    if(!demo&&offlineNow()){setDataReadError('Offline. Showing last loaded pit data.');return false;}
+    if(!supersede&&readPending.current?.version===request.current)return false;
+    const version = ++request.current,signal=accountRequests.current.signal;
+    readPending.current={version};setLoading(true);
+    const current=()=>appLive.current&&version===request.current&&!signal.aborted&&(demo||(authAllowed.current&&authIdentity.current===userId&&(!expiresAt.current||expiresAt.current>Date.now())));
     try {
-      const d = demo ? readDemo() : await fetchData();
-      if (version !== request.current) return;
-      const p = demo
-        ? demoProfile(role)
-        : d.profiles.find((p) => p.id === userId && p.active);
-      if (!p) {
-        setProfile(null);
-        setData(emptyData());
-        throw new Error(
-          "Your account needs an active Team 4418 profile. Ask a mentor or admin.",
-        );
-      }
-      setProfile(p);
-      setData(d);
-      setLastSync(new Date().toLocaleTimeString());
-      setLastSyncAt(Date.now());
-      setDataReadError("");
+      const d = demo ? readDemo() : await fetchData(signal);
+      if (!current()) return false;
+      const p = demo ? demoProfile(role) : d.profiles.find((p) => p.id === userId && p.active);
+      if (!p) {invalidateAccess('Your account needs an active Team 4418 profile. Ask a mentor or admin.');return false;}
+      setProfile(p);setData(d);setLastSync(new Date().toLocaleTimeString());setLastSyncAt(Date.now());setClockNow(Date.now());setDataReadError('');if(reviewAfterSave)setUncertainSave(false);
+      return true;
     } catch (e) {
-      if (version === request.current) {
-        const message =
-          e instanceof Error
-            ? e.message
-            : String((e as { message?: string }).message || e);
-        setError(message);
+      if (current()) {
+        if(accessFailure(e)){invalidateAccess();return false;}
+        const message=e instanceof Error?e.message:String((e as { message?: string }).message || e);
         setDataReadError(message);
+        if(!profile)setError(message);
       }
-    }
-  }, [demo, role, userId]);
+      return false;
+    } finally {if(readPending.current?.version===version)readPending.current=null;if(version===request.current)setLoading(false);}
+  }, [demo, role, userId,sessionGeneration,invalidateAccess]);
   useEffect(() => {
     if (!demo && !userId) return;
-    setLoading(true);
-    void refresh().finally(() => setLoading(false));
+    void refresh();
     const interval = window.setInterval(() => void refresh(), 20000);
     const focus = () => void refresh();
     window.addEventListener("focus", focus);
@@ -313,14 +336,12 @@ function App() {
       );
     } else setSync("Local demo");
     const online = () => {
-      setError("");
+      setOnline(true);setClockNow(Date.now());
       void refresh();
     };
     const offline = () => {
-      const message =
-        "You are offline. Changes cannot be saved. Displayed data may be out of date.";
-      setError(message);
-      setDataReadError(message);
+      setOnline(false);setClockNow(Date.now());request.current++;setLoading(false);
+      setDataReadError('Offline. Showing last loaded pit data.');
     };
     window.addEventListener("online", online);
     window.addEventListener("offline", offline);
@@ -339,35 +360,45 @@ function App() {
     p: Record<string, unknown>,
     close = true,
   ) {
-    if (!profile || busy) return false;
-    const savedModal=modalIdentity.current,savedHash=location.hash;
-    setBusy(true);
-    setError("");
+    if (!profile || saving.current) return false;
+    if(!demo&&(pitReadOnly||offlineNow()||!accessCurrent())){setError('Read-only. Refresh your connection before saving.');return false;}
+    const savedModal=modalIdentity.current,savedHash=location.hash,signal=accountRequests.current.signal;
+    const current=()=>appLive.current&&!signal.aborted&&accessCurrent();
+    saving.current=true;setBusy(true);setError('');setNotice('');
     try {
-      await mutate(demo, profile, action, p);
-      if(!appLive.current)return false;
-      await refresh();
-      if(!appLive.current)return false;
-      setNotice("Saved successfully");
-      if (close&&canDismissCompletedEditor(savedModal,modalIdentity.current,savedHash,location.hash)) closeModal();
+      await mutate(demo, profile, action, p,{actorId:profile.id,signal,isCurrent:current});
+      if(!current())return false;
+      const refreshed=await refresh(false,true);
+      if(!current())return false;
+      setNotice(refreshed?'Saved successfully':'Saved on the server. The latest view could not be loaded; retry the connection.');
+      if(close&&canDismissCompletedEditor(savedModal,modalIdentity.current,savedHash,location.hash))closeModal();
       return true;
     } catch (e) {
-      if(!appLive.current||!canDismissCompletedEditor(savedModal,modalIdentity.current,savedHash,location.hash))return false;
-      setError(
-        e instanceof Error
-          ? e.message
-          : String((e as { message?: string }).message || e),
-      );
+      if(!current())return false;
+      if(accessFailure(e)){invalidateAccess();return false;}
+      setUncertainSave(true);
+      setError(UNKNOWN_SAVE);
       return false;
-    } finally {
-      if(appLive.current)setBusy(false);
-    }
+    } finally {if(current()){saving.current=false;setBusy(false);}}
+  }
+  async function reportMatch(matchId:string,p:Record<string,unknown>){
+    const signal=accountRequests.current.signal,savedModal=modalIdentity.current,savedHash=location.hash;
+    const current=()=>appLive.current&&!signal.aborted&&accessCurrent();
+    try{
+      await competition.run('report_issue',{...p,match_id:matchId});
+      if(!current())return false;
+      const refreshed=await refresh(false,true);
+      if(!current())return false;
+      setNotice(refreshed?'Saved successfully':'Saved on the server. The latest view could not be loaded; retry the connection.');
+      if(canDismissCompletedEditor(savedModal,modalIdentity.current,savedHash,location.hash))closeModal();return true;
+    }catch{if(current())setError(UNKNOWN_SAVE);return false;}
   }
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(""), 3500);
     return () => clearTimeout(t);
   }, [notice]);
+  const displayUnverified=pitReadOnly||(!demo&&(!competition.context||!!competition.error||competition.readOnly));
   const active = data.events.find((e) => e.status === "active");
   const currentIssues = data.issues.filter((i) => i.event_id === active?.id);
   const open = currentIssues.filter(unresolved),
@@ -395,13 +426,14 @@ function App() {
       setDataReadError("");
       setModal(null);
     } else {
+      invalidateAccess('Signing out…');
       const result = await supabase!.auth.signOut();
       if (result.error) setError(result.error.message);
     }
   };
   if (!authReady)return <AuthSurface/>;
   if(!userId&&!demo){const localDemo=import.meta.env.DEV&&new URLSearchParams(location.search).has('demo');return <AuthSurface redirect={!!supabase&&!localDemo}>{localDemo?<button onClick={()=>setDemo(true)}>Explore local demo</button>:!supabase?<><p role="alert">Unable to connect securely.</p><a href="https://team.frc4418.org/">Team sign in</a></>:undefined}</AuthSurface>;}
-  if(!profile)return <><SuiteHeader app="Competition Operations" onSignOut={()=>void exit()}/><section className="login-card"><p role={error?'alert':'status'}>{error||'Loading your account…'}</p><button onClick={()=>void refresh()}>Retry</button></section></>;
+  if(!profile)return <><SuiteHeader app="Competition Operations" onSignOut={()=>void exit()}/><section className="login-card"><p role={error?'alert':'status'}>{error||'Loading your account…'}</p><button disabled={!demo&&!authAllowed.current} onClick={()=>void refresh()}>Retry</button><a href="https://team.frc4418.org/">Team sign in</a></section></>;
   const issue = data.issues.find(
     (i) => modal?.kind === "issue" && i.id === modal.id,
   );
@@ -491,7 +523,7 @@ function App() {
         </div>
       </aside>
       <div className="app">
-        <div className="workspace-tools"><span>{sync}</span><button className="icon-button" aria-label="Refresh data" onClick={()=>void refresh()}><RefreshCw size={17}/></button></div>
+        <div className="workspace-tools"><span>{!demo&&!online?'Offline':loading?'Refreshing pit data…':sync}</span><button className="icon-button" aria-label="Refresh data" onClick={()=>void refresh(true)}><RefreshCw size={17}/></button></div>
         {import.meta.env.DEV && demo && (
           <div className="demo-banner">
             <strong>LOCAL DEMO</strong>
@@ -512,13 +544,20 @@ function App() {
           </div>
         )}
         <main>
+          {!demo&&<section className={`connection-status ${pitReadOnly?'connection-stale':''}`} data-testid="connection-status" role="status">
+            <div><strong>{!online?'Offline · read-only':pitReadOnly?'Pit data may be stale · read-only':loading?'Refreshing pit data…':'Pit data connected'}</strong>
+              <p>Last loaded issues / batteries: {lastSyncAt?new Date(lastSyncAt).toLocaleString():'Not loaded'}</p>
+              {(pitReadOnly||dataReadError)&&<p>{uncertainSave?'A save was not confirmed. Refresh and review the record before trying again.':'Showing the last loaded snapshot. Verify status with the pit crew before queueing.'} Changes are never queued.</p>}
+              {dataReadError&&online&&<small>{dataReadError}</small>}
+            </div><button disabled={loading} onClick={()=>{setError('');void refresh(true);void competition.refresh(true);}}>Retry connection</button>
+          </section>}
           {error && !modal && (
             <div role="alert" className="error">
               {error}
               <button
                 onClick={() => {
                   setError("");
-                  void refresh();
+                  void refresh(true);
                 }}
               >
                 Retry
@@ -557,7 +596,7 @@ function App() {
               ? isAdmin(profile) && (
                   <button
                     className="primary"
-                    disabled={busy}
+                    disabled={writeBusy}
                     onClick={() => {
                       setError("");
                       setModal({ kind: "newBattery" });
@@ -570,7 +609,7 @@ function App() {
               : (page==="issues" || (page==="dashboard" && !competition.context?.config)) && canWork(profile) && (
                   <button
                     className="primary"
-                    disabled={!active || busy}
+                    disabled={!active || writeBusy}
                     onClick={() => {
                       setError("");
                       setModal({ kind: "report" });
@@ -620,12 +659,12 @@ function App() {
                       <TriangleAlert size={40} />
                     )}
                     <h2>
-                      {active ? readiness(currentIssues) : "NO ACTIVE EVENT"}
+                      {displayUnverified ? 'VERIFY STATUS' : active ? readiness(currentIssues) : "NO ACTIVE EVENT"}
                     </h2>
                   </div>
                   <p>
                     {active
-                      ? `${open.length} open ${open.length === 1 ? "issue" : "issues"} · ${down.length} robot-down ${down.length === 1 ? "issue" : "issues"}`
+                      ? `${displayUnverified?'Last recorded: '+readiness(currentIssues)+' · ':''}${open.length} open ${open.length === 1 ? "issue" : "issues"} · ${down.length} robot-down ${down.length === 1 ? "issue" : "issues"}`
                       : "Activate an event to see robot readiness."}
                   </p>
                   <div className="robot-foot">
@@ -932,7 +971,7 @@ function App() {
                           nextBattery[b.status] && (
                             <button
                               className="secondary"
-                              disabled={busy}
+                              disabled={writeBusy}
                               onClick={() => {
                                 if (b.status === "ON ROBOT") {
                                   setError("");
@@ -964,7 +1003,7 @@ function App() {
                           (b.status === "READY" || b.status === "CHARGING") && (
                             <button
                               className="text-button"
-                              disabled={busy}
+                              disabled={writeBusy}
                               onClick={() => {
                                 setError("");
                                 setModal({
@@ -1034,7 +1073,7 @@ function App() {
                   {e.status !== "active" ? (
                     <button
                       className="primary"
-                      disabled={busy}
+                      disabled={writeBusy}
                       onClick={() =>
                         void save("activate_event", { id: e.id }, false)
                       }
@@ -1044,7 +1083,7 @@ function App() {
                   ) : (
                     <button
                       className="secondary"
-                      disabled={busy}
+                      disabled={writeBusy}
                       onClick={() =>
                         void save(
                           "save_event",
@@ -1088,6 +1127,7 @@ function App() {
             setError("");
           }}
         >
+          {(pitReadOnly||modal.kind==='report'&&!!modal.matchId&&competition.readOnly)&&<div role="status" className="connection-stale"><p>Read-only snapshot. Reconnect, refresh, and review the current record before saving.</p><button type="button" disabled={loading||competition.refreshing} onClick={()=>{setError('');void refresh(true);void competition.refresh(true);}}>Refresh before retrying save</button></div>}
           {error && (
             <div role="alert" className="error">
               {error}
@@ -1096,9 +1136,9 @@ function App() {
           {modal.kind === "report" && (
             <Report
               data={data}
-              busy={busy}
+              busy={writeBusy||!!modal.matchId&&(competition.busy||competition.readOnly)}
               submit={(p) =>
-                modal.matchId ? competition.run("report_issue",{...p,match_id:modal.matchId}).then(async()=>{await refresh();setModal(null);return true;}).catch(()=>false) : save("report_issue", { ...p, event_id: active?.id })
+                modal.matchId ? reportMatch(modal.matchId,p) : save("report_issue", { ...p, event_id: active?.id })
               }
             />
           )}{" "}
@@ -1110,7 +1150,7 @@ function App() {
               purchaseScope={{actorId:profile.id,signal:accountRequests.current.signal,isCurrent:()=>appLive.current&&authIdentity.current===profile.id&&canDismissCompletedEditor(modal,modalIdentity.current,issueHash,location.hash)}}
               data={data}
               profile={profile}
-              busy={busy}
+              busy={writeBusy}
               name={name}
               submit={(p) => save("update_issue", p)}
             />
@@ -1121,7 +1161,7 @@ function App() {
               battery={battery}
               data={data}
               action={modal.action}
-              busy={busy}
+              busy={writeBusy}
               eventId={active?.id}
               submit={(p) => save("transition_battery", p)}
             />
@@ -1132,7 +1172,7 @@ function App() {
               battery={battery}
               data={data}
               profile={profile}
-              busy={busy}
+              busy={writeBusy}
               name={name}
               eventId={active?.id}
               save={save}
@@ -1150,12 +1190,12 @@ function App() {
           {modal.kind === "event" && (
             <EventForm
               event={data.events.find((e) => e.id === modal.id)}
-              busy={busy}
+              busy={writeBusy}
               submit={(p) => save("save_event", p)}
             />
           )}{" "}
           {modal.kind === "newBattery" && (
-            <BatteryForm busy={busy} submit={(p) => save("save_battery", p)} />
+            <BatteryForm busy={writeBusy} submit={(p) => save("save_battery", p)} />
           )}
         </Dialog>
       )}

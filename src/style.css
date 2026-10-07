@@ -1558,3 +1558,10 @@ a:focus-visible, button:focus-visible { outline-color: var(--suite-primary); }
 .info, .notice { color: var(--suite-primary); background: var(--suite-info-bg); }
 
 @media(min-width:761px){.sidebar{top:76px}}.workspace-tools{display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:8px 24px;color:#606060;font-size:12px}
+
+.connection-status{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.25rem;margin-bottom:1rem;border:1px solid var(--border,#d6dcd7);border-radius:12px;background:var(--surface,#fff)}
+.connection-status p{margin:.3rem 0;font-size:.9rem}
+.connection-status small{overflow-wrap:anywhere}
+.connection-status button{flex-shrink:0}
+.connection-stale{color:#62440c;background:#fff6dc;border-color:#d8b971;padding:.8rem;border-radius:8px}
+@media(max-width:600px){.connection-status{align-items:stretch;flex-direction:column}}

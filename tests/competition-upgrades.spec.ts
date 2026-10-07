@@ -130,7 +130,7 @@ test("pit display shows owners, battery mismatch and freshness; close and escape
   await expect(display).toHaveCount(0);
   await page.getByRole("button", { name: "Open pit display" }).click();
   await page.evaluate(() => window.dispatchEvent(new Event("offline")));
-  await expect(display).toContainText("PIT DATA MAY BE STALE");
+  await expect(display).toContainText("OFFLINE · READ-ONLY SNAPSHOT");
   await expect(display).toContainText("VERIFY STATUS");
 });
 test("readiness cannot be ready before installation and clears after the final post-match inspection", async ({

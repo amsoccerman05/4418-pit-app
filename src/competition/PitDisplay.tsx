@@ -35,12 +35,13 @@ export function PitDisplay({
       ? liveFor(next, c.feed?.nexus?.matches || [])
       : null;
   const localStale =
+    c.readOnly || c.online===false ||
     !!dataError ||
     !!c.error ||
     isStale(dataUpdatedAt, c.tick, 60000) ||
     isStale(c.contextAt, c.tick, 90000);
   const scheduleStale =
-    !!c.feedError || !!c.feed?.tbaError || isStale(c.feed?.tbaAt, c.tick);
+    c.online===false || !!c.feedError || !!c.feed?.tbaError || isStale(c.feed?.tbaAt, c.tick);
   return (
     <dialog
       ref={dialog}
@@ -62,7 +63,7 @@ export function PitDisplay({
       </header>
       <div className="comp-display-freshness" role="status">
         <strong>
-          {localStale
+          {c.online===false ? 'OFFLINE · READ-ONLY SNAPSHOT' : localStale
             ? "PIT DATA MAY BE STALE · verify before queueing"
             : "Pit data connected"}
         </strong>
@@ -75,6 +76,7 @@ export function PitDisplay({
           {at(c.feed?.tbaAt)} ·{" "}
           {c.liveAvailable ? "Nexus live" : "Live queue unavailable"}
         </span>
+        <button disabled={c.refreshing} onClick={()=>void c.refresh(true)}>Retry schedule / checklists</button>
       </div>
       <div className="comp-display-grid">
         <section className="card comp-display-next">
