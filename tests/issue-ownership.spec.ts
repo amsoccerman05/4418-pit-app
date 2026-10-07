@@ -130,12 +130,14 @@ async function setup(page: Page, role: Profile["role"] = "mentor") {
   await page.route("**/src/client.ts", (route) =>
     route.fulfill({
       contentType: "application/javascript",
-      body: `const request=async(path,body)=>{const response=await fetch('/ownership-fixture/'+path,{method:'POST',body:JSON.stringify(body)});return response.json()};
+      body: `const session={user:{id:'me'},access_token:'fixture-token-me',expires_at:Math.floor(Date.now()/1000)+3600};
+      const request=async(path,body,signal,headers)=>{const response=await fetch('/ownership-fixture/'+path,{method:'POST',body:JSON.stringify(body),signal,headers});return response.json()};
+      const query=(path,body)=>({signal:undefined,headers:{},select(){return this},order(){return this},range(){return this},setHeader(name,value){this.headers[name]=value;return this},abortSignal(signal){this.signal=signal;return this},then(resolve,reject){return request(path,body,this.signal,this.headers).then(resolve,reject)}});
       export const configured=true,configError='';
       export const supabase={
-        auth:{onAuthStateChange(callback){queueMicrotask(()=>callback('SIGNED_IN',{user:{id:'me'}}));return {data:{subscription:{unsubscribe(){}}}}},async signOut(){return {error:null}}},
-        from(table){return {select(){return this},order(){return this},range(){return request('table/'+table,{})}}},
-        rpc(name,args){return request('rpc/'+name,args)},functions:{invoke(name,args){return request('feed',args)}},
+        auth:{onAuthStateChange(callback){queueMicrotask(()=>callback('SIGNED_IN',session));return {data:{subscription:{unsubscribe(){}}}}},async getSession(){return {data:{session},error:null}},async signOut(){return {error:null}}},
+        from(table){return query('table/'+table,{})},
+        rpc(name,args){return query('rpc/'+name,args)},functions:{invoke(name,args){return request('feed',args,args?.signal)}},
         channel(){return {on(){return this},subscribe(){return this}}},removeChannel(){}};`,
     }),
   );

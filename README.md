@@ -66,6 +66,10 @@ No additional migration is needed: the existing `pit_battery_events.match_number
 
 Subscriptions cover issues, batteries, both histories, and event changes, with cleanup on logout/unmount. Profile changes are subscribed when the existing profile publication permits them. A 20-second refresh and focus refresh provide fallback and recheck active profiles. Stale write conflicts are shown rather than silently overwritten. Offline writes are not queued; errors keep forms open. Realtime shows its connection state separately from last refresh time. Changes update the current device after a successful save.
 
+### Poor-internet read-only view
+
+A loaded signed-in tab keeps its last successful schedule and Pit snapshot readable when internet drops. Offline/stale banners retain original timestamps; readiness changes to **VERIFY STATUS**, and writes are blocked until the connection and current records can be checked. No writes are queued or automatically replayed. Private snapshots stay in memory and clear on sign-out, account change, session expiry, or observed loss of access. This does not provide offline reload/cold-start support. See [behavior, safety, and verification](docs/POOR-INTERNET.md).
+
 ## Repository structure
 
 ```text

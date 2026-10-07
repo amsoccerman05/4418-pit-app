@@ -6,6 +6,7 @@ export function EventStandings({ c, team }: { c: Competition; team: number }) {
   const hasData =
     !!standings && (standings.rank !== null || standings.record !== null);
   const stale = !!(
+    c.online===false ||
     c.feedError ||
     feed?.standingsError ||
     feed?.standingsStale ||
