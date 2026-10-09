@@ -16,6 +16,7 @@ function localInput(value?: string | null) {
 }
 export function PracticeEditor({
   ops,
+  initialLabel = "",
   eventId,
   d,
   busy,
@@ -23,6 +24,7 @@ export function PracticeEditor({
   cancel,
 }: {
   ops?: Ops;
+  initialLabel?: string;
   eventId: string;
   d: Context;
   busy: boolean;
@@ -80,10 +82,11 @@ export function PracticeEditor({
         Practice label
         <input
           name="label"
+          autoFocus
           required
           maxLength={80}
           placeholder="Practice 1"
-          defaultValue={ops?.manual_label || ""}
+          defaultValue={ops?.manual_label || initialLabel}
         />
       </label>
       <label>
@@ -102,6 +105,13 @@ export function PracticeEditor({
         Open practices stay the dashboard preparation target until finished or
         archived. Official matches remain in their own list.
       </p>
+      {!ops && (
+        <p>
+          This is a new practice. Start fresh checklists from your templates
+          after saving. Previous checks, battery assignment, notes and start
+          time are not copied; earlier inspections stay on their own practice.
+        </p>
+      )}
       {error && (
         <p role="alert" className="error">
           {error}

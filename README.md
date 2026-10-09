@@ -4,7 +4,7 @@ A mobile-first competition pit workspace for FRC Team 4418 IMPULSE. This is a se
 
 ## Manual practice matches
 
-Competition leadership can add practice matches in **Matches** without a TBA schedule, then use normal preparation and explicit pre/post checklists. See [manual practice workflow and release requirements](docs/MANUAL-PRACTICE.md).
+Competition leadership can add practice matches in **Matches** without a TBA schedule, then use normal preparation and explicit pre/post checklists. **Add next practice** suggests a reviewable label and opens a clean record with independent checklists. The dashboard’s expandable **Crew quick-start** walks phone users through preparation, battery verification, and post-run inspection. See [manual practice workflow and release requirements](docs/MANUAL-PRACTICE.md).
 
 ## Run locally
 

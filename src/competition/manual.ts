@@ -67,3 +67,22 @@ export function practiceLabel(ops: Ops) {
     ? ops.manual_label || "Practice match"
     : ops.match_key;
 }
+
+// Include finished and archived practices so the suggested label keeps a clear
+// sequence. This is only a draft; the server still enforces active uniqueness.
+export function nextPracticeLabel(ops: Ops[]): string {
+  const labels = ops
+    .filter((o) => o.source === "manual")
+    .map((o) =>
+      (o.manual_label || "").trim().replace(/\s+/g, " ").toLowerCase(),
+    );
+  const used = new Set(labels);
+  const numbers = labels
+    .map((label) => /^practice (\d+)$/.exec(label)?.[1])
+    .map(Number)
+    .filter((n) => Number.isSafeInteger(n) && n > 0);
+  let next = numbers.reduce((max, n) => Math.max(max, n), 0) + 1;
+  if (!Number.isSafeInteger(next)) next = 1;
+  while (used.has(`practice ${next}`)) next++;
+  return `Practice ${next}`;
+}

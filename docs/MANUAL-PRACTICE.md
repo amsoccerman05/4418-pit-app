@@ -36,3 +36,13 @@ Automated tests use synthetic local fixtures and in-memory PostgreSQL. They do n
 - Playwright collection: 125 cases, including 22 new manual-practice desktop/phone cases. Browser execution was blocked before assertions by Chromium's `process_singleton_posix.cc` socket permission failure in this executor. Collection is not a browser pass; run the standard CI runner before release.
 - Independent code review completed, with navigation races, committed-response-loss retry, official progress, archived-only issue reporting, and practice labels corrected and regression-tested.
 - Read-only production preflight matched the current competition schema/RPC baseline. No production migration or real practice record was created during implementation.
+
+## Next-practice shortcut and crew quick-start
+
+**Add next practice** on the dashboard, practice details, or an existing practice list opens a reviewable draft. It suggests the next unused `Practice N` number after the event's numbered practice history, including finished and archived records. You can change the label and optional time before saving, or cancel without creating anything.
+
+Each new practice has its own identity. It starts without a battery assignment, operational notes, scheduled time, or checklist runs. Use **Start checklist** to create new unchecked items from an active template. No previous completions, actors, issue links, or physical battery changes are copied. Earlier practices are not automatically finished, and unfinished post-match inspections remain visible in readiness.
+
+The dashboard's expandable **Crew quick-start** is a phone-friendly reminder of preparation, battery checks, and post-run reporting. Its links open the existing screens; permissions and offline save gates are unchanged. It does not certify a complete battery inventory or replace a physical inspection. Missing battery records can be added by a mentor/admin in Batteries.
+
+This follow-on UI release requires no database migration or new server capability beyond the already-deployed manual-practice API. No battery timers or inventory records are added.
