@@ -43,6 +43,13 @@ export type Ops = {
   id: string;
   event_id: string;
   match_key: string;
+  source?: "tba" | "manual";
+  manual_label?: string | null;
+  scheduled_at?: string | null;
+  finished_at?: string | null;
+  finished_by?: string | null;
+  archived_at?: string | null;
+  archived_by?: string | null;
   battery_id: string | null;
   note: string;
   version: number;
@@ -65,6 +72,7 @@ export type Item = TemplateItem & {
   version: number;
 };
 export type Context = {
+  manual_matches_enabled?: boolean;
   can_manage: boolean;
   config: {
     event_id: string;

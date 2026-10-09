@@ -606,7 +606,7 @@ function App() {
                     Add battery
                   </button>
                 )
-              : (page==="issues" || (page==="dashboard" && !competition.context?.config)) && canWork(profile) && (
+              : (page==="issues" || (page==="dashboard" && !competition.context?.config && !competition.context?.matches.some(m=>m.source==='manual'))) && canWork(profile) && (
                   <button
                     className="primary"
                     disabled={!active || writeBusy}
@@ -643,7 +643,7 @@ function App() {
           </div>
           {!demo && ['dashboard','matches','checklists','admin'].includes(page) && <CompetitionWorkspace page={page} competition={competition} data={data} dataUpdatedAt={lastSyncAt} dataError={dataReadError} profile={profile} go={go} report={matchId=>setModal({kind:'report',matchId})} openIssue={id=>setModal({kind:'issue',id})} batteryAction={id=>setModal({kind:'battery',id})}/>}
           {demo && ['matches','checklists'].includes(page) && <section className="card"><p>Competition event feeds and shared checklists are available in the signed-in team workspace.</p></section>}
-          {page === "dashboard" && (demo || !competition.context?.config) && (
+          {page === "dashboard" && (demo || !competition.context?.config && !competition.context?.matches.some(m=>m.source==='manual')) && (
             <>
               <div className="readiness-grid">
                 <section
@@ -1166,7 +1166,7 @@ function App() {
               submit={(p) => save("transition_battery", p)}
             />
           )}
-          {battery && modal.kind === "battery" && <div className="card"><strong>Matches assigned to this battery</strong>{competition.context?.matches.filter(m=>m.battery_id===battery.id).map(m=><p key={m.id}>{m.match_key}</p>)}</div>}
+          {battery && modal.kind === "battery" && <div className="card"><strong>Matches assigned to this battery</strong>{competition.context?.matches.filter(m=>m.battery_id===battery.id).map(m=><p key={m.id}>{m.source==='manual'?`${m.manual_label} · Manual`:m.match_key}</p>)}</div>}
           {battery && modal.kind === "battery" && (
             <BatteryDetail
               battery={battery}

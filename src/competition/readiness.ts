@@ -1,9 +1,13 @@
 import type { Data } from "../model";
 import type { Context, Match } from "./service";
+import { operationalReadiness } from "../../supabase/functions/competition-feed/external.ts";
+
 import {
-  nextMatch,
-  operationalReadiness,
-} from "../../supabase/functions/competition-feed/external.ts";
+  latestCompletedMatch,
+  manualMatches,
+  nextOperationalMatch,
+  type OperationalMatch,
+} from "./manual.ts";
 
 export type ReadinessReason = {
   key: string;
@@ -17,7 +21,7 @@ export type ReadinessReason = {
 // A single read-only projection for both dashboard and pit display. Feed results
 // never complete a checklist or change a battery's recorded physical state.
 export function competitionReadiness(d: Context, data: Data, matches: Match[]) {
-  const next = nextMatch(matches),
+  const next = nextOperationalMatch(matches, d.matches),
     ops = d.matches.find((o) => o.match_key === next?.key);
   const battery = data.batteries.find((b) => b.id === ops?.battery_id);
   const installed = data.batteries.filter((b) => b.status === "ON ROBOT");
@@ -33,20 +37,32 @@ export function competitionReadiness(d: Context, data: Data, matches: Match[]) {
   const issues = data.issues.filter(
     (i) => i.event_id === event?.id && i.status !== "RESOLVED",
   );
-  const last = matches.filter((m) => m.completed).at(-1),
+  const last = latestCompletedMatch(matches, d.matches),
     lastOps = d.matches.find((o) => o.match_key === last?.key);
-  const post = d.runs.filter(
-    (r) => r.kind === "post" && r.match_id === lastOps?.id,
-  );
-  const postPending =
-    !!last &&
-    (!post.length ||
+  const needsPost = (match: OperationalMatch) => {
+    const matchOps = d.matches.find((o) => o.match_key === match.key);
+    const post = d.runs.filter(
+      (r) => r.kind === "post" && r.match_id === matchOps?.id,
+    );
+    return (
+      !post.length ||
       d.items.some(
         (i) =>
           post.some((r) => r.id === i.run_id) &&
           (i.required || i.blocking) &&
           !i.completed_at,
-      ));
+      )
+    );
+  };
+  // Keep every manual inspection visible, even after archiving. Otherwise a
+  // second practice could hide the inspection still owed for the first one.
+  const postMatches: OperationalMatch[] = manualMatches(d.matches, true).filter(
+    (m) => m.completed,
+  );
+  const lastOfficial = matches.filter((m) => m.completed).at(-1);
+  if (lastOfficial) postMatches.push(lastOfficial);
+  const pendingPosts = postMatches.filter(needsPost);
+  const postPending = !!last && needsPost(last);
   const reasons: ReadinessReason[] = issues
     .filter((i) => ["HIGH", "ROBOT DOWN"].includes(i.severity))
     .map((i) => ({
@@ -109,17 +125,17 @@ export function competitionReadiness(d: Context, data: Data, matches: Match[]) {
       });
     }
   }
-  if (postPending && last)
+  for (const match of pendingPosts)
     reasons.push({
-      key: "post",
-      text: `Post-match inspection unfinished · ${last.label}`,
+      key: `post:${match.key}`,
+      text: `Post-match inspection unfinished · ${match.label}`,
       blocking: false,
-      matchKey: last.key,
+      matchKey: match.key,
     });
   const status = operationalReadiness(issues, d.items, pre.length > 0, {
     hasNext: !!next,
     battery: batteryReadiness,
-    postPending,
+    postPending: pendingPosts.length > 0,
   });
   return {
     status,
