@@ -24,6 +24,20 @@ async function allMatches(page: Page) {
   if (await back.count()) await back.click();
 }
 
+async function capturePractice(page: Page, phase: "pre" | "post") {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+  await page.screenshot({
+    path: `test-results/manual-practice-${phase}-${test.info().project.name}.png`,
+    fullPage: true,
+  });
+}
+
 test("manual practice without external event configuration persists preparation, preflight, finish and postflight", async ({
   page,
 }) => {
@@ -45,7 +59,7 @@ test("manual practice without external event configuration persists preparation,
     .getByRole("combobox", { name: "Battery", exact: true })
     .selectOption("battery");
   await page
-    .getByLabel("Operational note", { exact: true })
+    .getByRole("textbox", { name: "Operational note", exact: true })
     .fill("Low-speed driver practice");
   await page
     .getByRole("button", { name: "Save preparation", exact: true })
@@ -63,16 +77,13 @@ test("manual practice without external event configuration persists preparation,
   await expect(preCheck).not.toBeChecked();
   await preCheck.click();
   await expect(preCheck).toBeChecked();
-  await page.screenshot({
-    path: `test-results/manual-practice-pre-${test.info().project.name}.png`,
-    fullPage: true,
-  });
+  await capturePractice(page, "pre");
   expect(data.pit_batteries[0].status).toBe("READY");
   await page.reload();
   await allMatches(page);
   await page.getByRole("button", { name: /Drive-team warmup/ }).click();
   await expect(
-    page.getByLabel("Operational note", { exact: true }),
+    page.getByRole("textbox", { name: "Operational note", exact: true }),
   ).toHaveValue("Low-speed driver practice");
   await expect(preCheck).toBeChecked();
   await page
@@ -109,10 +120,7 @@ test("manual practice without external event configuration persists preparation,
   await page.getByRole("button", { name: /Drive-team warmup/ }).click();
   await expect(preCheck).toBeChecked();
   await expect(postCheck).toBeChecked();
-  await page.screenshot({
-    path: `test-results/manual-practice-post-${test.info().project.name}.png`,
-    fullPage: true,
-  });
+  await capturePractice(page, "post");
   expect(context.runs.map((run: any) => run.kind)).toEqual(["pre", "post"]);
   expect(
     calls.filter((call) => call.action === "finish_manual_match"),
