@@ -3,6 +3,7 @@ import { issueOwner, type Data } from "../model";
 import { liveFor, type Competition } from "./service";
 import { isStale } from "./feed-state";
 import type { Readiness } from "./readiness";
+import { isManualMatch } from "./manual";
 import { EventStandings } from "./Standings";
 const at = (n: number | null | undefined) =>
   n ? new Date(n).toLocaleString() : "Not loaded";
@@ -31,17 +32,21 @@ export function PitDisplay({
     dialog.current?.showModal();
   }, []);
   const n =
-    next && c.liveAvailable
+    next && !isManualMatch(next) && c.liveAvailable
       ? liveFor(next, c.feed?.nexus?.matches || [])
       : null;
   const localStale =
-    c.readOnly || c.online===false ||
+    c.readOnly ||
+    c.online === false ||
     !!dataError ||
     !!c.error ||
     isStale(dataUpdatedAt, c.tick, 60000) ||
     isStale(c.contextAt, c.tick, 90000);
   const scheduleStale =
-    c.online===false || !!c.feedError || !!c.feed?.tbaError || isStale(c.feed?.tbaAt, c.tick);
+    c.online === false ||
+    !!c.feedError ||
+    !!c.feed?.tbaError ||
+    isStale(c.feed?.tbaAt, c.tick);
   return (
     <dialog
       ref={dialog}
@@ -63,20 +68,30 @@ export function PitDisplay({
       </header>
       <div className="comp-display-freshness" role="status">
         <strong>
-          {c.online===false ? 'OFFLINE · READ-ONLY SNAPSHOT' : localStale
-            ? "PIT DATA MAY BE STALE · verify before queueing"
-            : "Pit data connected"}
+          {c.online === false
+            ? "OFFLINE · READ-ONLY SNAPSHOT"
+            : localStale
+              ? "PIT DATA MAY BE STALE · verify before queueing"
+              : "Pit data connected"}
         </strong>
         <span>
           Issues / batteries: {at(dataUpdatedAt)} · Checklists:{" "}
           {at(c.contextAt)}
         </span>
         <span>
-          {scheduleStale ? "Schedule may be stale" : "TBA schedule"} ·{" "}
-          {at(c.feed?.tbaAt)} ·{" "}
-          {c.liveAvailable ? "Nexus live" : "Live queue unavailable"}
+          {c.context?.config ? (
+            <>
+              {scheduleStale ? "Schedule may be stale" : "TBA schedule"} ·{" "}
+              {at(c.feed?.tbaAt)} ·{" "}
+              {c.liveAvailable ? "Nexus live" : "Live queue unavailable"}
+            </>
+          ) : (
+            "Official schedule not connected · manual practice uses saved crew data"
+          )}
         </span>
-        <button disabled={c.refreshing} onClick={()=>void c.refresh(true)}>Retry schedule / checklists</button>
+        <button disabled={c.refreshing} onClick={() => void c.refresh(true)}>
+          Retry schedule / checklists
+        </button>
       </div>
       <div className="comp-display-grid">
         <section className="card comp-display-next">
@@ -84,14 +99,18 @@ export function PitDisplay({
           <h2>{next?.label || "Not published"}</h2>
           <p>
             {next
-              ? `${next.alliance.toUpperCase()} · ${next[next.alliance].join(" · ")}`
+              ? isManualMatch(next)
+                ? "Manual practice · confirm timing with field crew"
+                : `${next.alliance.toUpperCase()} · ${next[next.alliance].join(" · ")}`
               : "No upcoming match in the loaded schedule."}
           </p>
           <strong>
-            {n?.status ||
-              (c.liveAvailable
-                ? "Queue status not available for this match"
-                : "Live queue unavailable")}
+            {next && isManualMatch(next)
+              ? "Finish or archive practice to move on"
+              : n?.status ||
+                (c.liveAvailable
+                  ? "Queue status not available for this match"
+                  : "Live queue unavailable")}
           </strong>
           <p>
             {n?.queue
@@ -181,7 +200,7 @@ export function PitDisplay({
           )}
         </section>
       </div>
-      <EventStandings c={c} team={team} />
+      {c.context?.config && <EventStandings c={c} team={team} />}
       {state.issues.filter((i) => !["HIGH", "ROBOT DOWN"].includes(i.severity))
         .length > 0 && (
         <section className="card">

@@ -2,6 +2,10 @@
 
 A mobile-first competition pit workspace for FRC Team 4418 IMPULSE. This is a separate application from Team 4418 Inventory. It uses the same Supabase Auth users and existing `public.profiles`; it never creates a second user/role system.
 
+## Manual practice matches
+
+Competition leadership can add practice matches in **Matches** without a TBA schedule, then use normal preparation and explicit pre/post checklists. See [manual practice workflow and release requirements](docs/MANUAL-PRACTICE.md).
+
 ## Run locally
 
 Use Node 24 and npm:
