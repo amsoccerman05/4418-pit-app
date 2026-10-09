@@ -18,6 +18,7 @@ test("crew quick-start is a collapsible touch-friendly guide with real workflow 
   const guide = page.locator(".comp-crew-guide");
   await expect(guide).not.toHaveAttribute("open", "");
   await openGuide(page);
+  await expect(guide.locator("summary")).toHaveCSS("display", "list-item");
   await expect(guide).toContainText("Practice 1");
   await expect(guide).toContainText("The battery list may be incomplete.");
   await expect(guide).toContainText("Assigning a battery does not install it.");
