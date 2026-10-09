@@ -61,8 +61,12 @@ test("manual practice without external event configuration persists preparation,
     .click();
   const preCheck = page.getByRole("checkbox", { name: /Latch check/ });
   await expect(preCheck).not.toBeChecked();
-  await preCheck.check();
+  await preCheck.click();
   await expect(preCheck).toBeChecked();
+  await page.screenshot({
+    path: `test-results/manual-practice-pre-${test.info().project.name}.png`,
+    fullPage: true,
+  });
   expect(data.pit_batteries[0].status).toBe("READY");
   await page.reload();
   await allMatches(page);
@@ -98,13 +102,17 @@ test("manual practice without external event configuration persists preparation,
     name: /Inspect intake after practice/,
   });
   await expect(postCheck).not.toBeChecked();
-  await postCheck.check();
+  await postCheck.click();
   await expect(postCheck).toBeChecked();
   await page.reload();
   await allMatches(page);
   await page.getByRole("button", { name: /Drive-team warmup/ }).click();
   await expect(preCheck).toBeChecked();
   await expect(postCheck).toBeChecked();
+  await page.screenshot({
+    path: `test-results/manual-practice-post-${test.info().project.name}.png`,
+    fullPage: true,
+  });
   expect(context.runs.map((run: any) => run.kind)).toEqual(["pre", "post"]);
   expect(
     calls.filter((call) => call.action === "finish_manual_match"),
@@ -424,7 +432,7 @@ test("crew can work practice checklists but cannot create, edit, finish or archi
   await page
     .getByRole("button", { name: "Start checklist", exact: true })
     .click();
-  await page.getByRole("checkbox", { name: /Latch check/ }).check();
+  await page.getByRole("checkbox", { name: /Latch check/ }).click();
   await expect(
     page.getByRole("checkbox", { name: /Latch check/ }),
   ).toBeChecked();
