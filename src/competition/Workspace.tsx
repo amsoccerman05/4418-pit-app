@@ -20,8 +20,9 @@ import {
   type TemplateItem,
 } from "./service";
 import "./competition.css";
-import { manualMatches, practiceLabel } from "./manual";
+import { manualMatches, nextPracticeLabel, practiceLabel } from "./manual";
 import { PracticeEditor, PracticeControls } from "./ManualPractice";
+import { CrewQuickStart } from "./CrewQuickStart";
 const when = (n: number | string | null | undefined) =>
   n
     ? new Date(n).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
@@ -59,9 +60,9 @@ export function CompetitionWorkspace({
   const [selected, setSelected] = useState<string | null>(null),
     [editing, setEditing] = useState<Partial<Template> | null>(null),
     [filter, setFilter] = useState("all"),
-    [addingPractice, setAddingPractice] = useState(false);
+    [addingPractice, setAddingPractice] = useState<string | null>(null);
   const practiceGeneration = useRef(0);
-  const addPractice = (value: boolean) => {
+  const addPractice = (value: string | null) => {
     practiceGeneration.current++;
     setAddingPractice(value);
   };
@@ -76,10 +77,10 @@ export function CompetitionWorkspace({
   useEffect(() => {
     setSelected(null);
     editTemplate(null);
-    addPractice(false);
+    addPractice(null);
   }, [event?.id, d?.config?.version, d?.config?.team_number]);
   useEffect(() => {
-    if (page !== "matches") addPractice(false);
+    if (page !== "matches") addPractice(null);
   }, [page]);
   if (!d)
     return (
@@ -106,7 +107,7 @@ export function CompetitionWorkspace({
       .then((id) => done?.(id))
       .catch(() => {});
   const open = (key: string) => {
-    addPractice(false);
+    addPractice(null);
     setSelected(key);
     go("matches");
   };
@@ -114,6 +115,13 @@ export function CompetitionWorkspace({
   const practice = ops?.source === "manual";
   const completed = practice ? !!ops.finished_at : !!match?.completed;
   const practices = manualMatches(d.matches, true);
+  const canAddPractice = !!(d.can_manage && event && d.manual_matches_enabled);
+  const addNextPractice = () => {
+    if (!canAddPractice || c.busy || c.readOnly) return;
+    setSelected(null);
+    addPractice(nextPracticeLabel(d.matches));
+    go("matches");
+  };
   const announcements = c.liveAvailable ? feed?.nexus?.announcements : [];
   const live = (m: Match) =>
     c.liveAvailable ? liveFor(m, feed?.nexus?.matches || []) : null;
@@ -181,6 +189,38 @@ export function CompetitionWorkspace({
           {c.contextAt ? new Date(c.contextAt).toLocaleString() : "Not loaded"}.
           Refresh before making changes.
         </p>
+      )}
+      {page === "dashboard" && canAddPractice && (
+        <div className="comp-inline">
+          <button disabled={c.busy || c.readOnly} onClick={addNextPractice}>
+            Add next practice
+          </button>
+          <small>Review the label, then start fresh checklists.</small>
+        </div>
+      )}
+      {page === "dashboard" && (
+        <CrewQuickStart
+          d={d}
+          data={data}
+          profile={profile}
+          readOnly={c.readOnly}
+          scheduleStale={
+            !c.online ||
+            !!c.feedError ||
+            !!feed?.tbaError ||
+            isStale(feed?.tbaAt, c.tick)
+          }
+          next={state.next}
+          open={open}
+          go={(target) => {
+            if (target === "matches") {
+              addPractice(null);
+              setSelected(null);
+            }
+            go(target);
+          }}
+          report={() => report()}
+        />
       )}
       {["dashboard", "matches", "admin"].includes(page) && (
         <div className="comp-feed">
@@ -288,13 +328,23 @@ export function CompetitionWorkspace({
           >
             <div className="comp-feed">
               <h2>Manual practice</h2>
-              {d.can_manage && event && d.manual_matches_enabled && (
-                <button
-                  disabled={c.busy || c.readOnly}
-                  onClick={() => addPractice(true)}
-                >
-                  Add practice match
-                </button>
+              {canAddPractice && (
+                <div className="comp-inline">
+                  <button
+                    disabled={c.busy || c.readOnly}
+                    onClick={() => addPractice("")}
+                  >
+                    Add practice match
+                  </button>
+                  {practices.length > 0 && (
+                    <button
+                      disabled={c.busy || c.readOnly}
+                      onClick={addNextPractice}
+                    >
+                      Add next practice
+                    </button>
+                  )}
+                </div>
               )}
             </div>
             {!event && (
@@ -309,17 +359,19 @@ export function CompetitionWorkspace({
               Practice matches are saved by the pit crew. Open practices stay
               the preparation target until finished or archived.
             </p>
-            {addingPractice && event && (
+            {addingPractice !== null && event && (
               <PracticeEditor
+                key={practiceGeneration.current}
+                initialLabel={addingPractice}
                 eventId={event.id}
                 d={d}
                 busy={c.busy || c.readOnly}
-                cancel={() => addPractice(false)}
+                cancel={() => addPractice(null)}
                 save={(p) => {
                   const generation = practiceGeneration.current;
                   act("manual_match", p, (id) => {
                     if (generation === practiceGeneration.current) {
-                      addPractice(false);
+                      addPractice(null);
                       setSelected(`manual:${id}`);
                     }
                   });
@@ -398,7 +450,7 @@ export function CompetitionWorkspace({
         <>
           <button
             onClick={() => {
-              addPractice(false);
+              addPractice(null);
               setSelected(null);
             }}
           >
@@ -416,6 +468,11 @@ export function CompetitionWorkspace({
                 act={act}
                 profiles={data.profiles}
               />
+            )}
+            {practice && canAddPractice && (
+              <button disabled={c.busy || c.readOnly} onClick={addNextPractice}>
+                Add next practice
+              </button>
             )}
             {match && matchCard(match)}
             {!ops && (

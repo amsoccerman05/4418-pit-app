@@ -10,6 +10,7 @@ import {
   latestCompletedMatch,
   manualMatches,
   nextOperationalMatch,
+  nextPracticeLabel,
 } from "../src/competition/manual.ts";
 import { competitionReadiness } from "../src/competition/readiness.ts";
 
@@ -47,6 +48,30 @@ const practice = (id = "practice", extra = {}) => ({
   note: "",
   version: 1,
   ...extra,
+});
+
+test("next practice label advances numbered history, includes archives, and does not mutate records", () => {
+  assert.equal(nextPracticeLabel([]), "Practice 1");
+  const ops = [
+    practice("one", { manual_label: "Practice 1", finished_at: at }),
+    practice("archived", {
+      manual_label: "  PRACTICE   04  ",
+      archived_at: at,
+    }),
+    practice("custom", { manual_label: "Drive-team warmup" }),
+    { source: "tba", manual_label: "Practice 99" },
+  ];
+  const before = structuredClone(ops);
+  assert.equal(nextPracticeLabel(ops), "Practice 5");
+  assert.deepEqual(ops, before);
+  assert.equal(
+    nextPracticeLabel([
+      practice("large", {
+        manual_label: `Practice ${Number.MAX_SAFE_INTEGER}`,
+      }),
+    ]),
+    "Practice 1",
+  );
 });
 
 test("manual projection is explicit local provenance, with no fabricated alliances, score or match metadata", () => {
@@ -408,6 +433,22 @@ test("rendered manual controls preserve completion and archive provenance and di
   assert.ok(html.includes("Practice label"));
   assert.ok(html.includes('type="datetime-local"'));
   assert.match(html, /<button[^>]*disabled=""[^>]*>Add practice<\/button>/);
+});
+
+test("next practice editor prefills a reviewable label but no time or copied preparation", () => {
+  const f = componentFixture();
+  const html = render(PracticeEditor, {
+    initialLabel: "Practice 7",
+    eventId: "event",
+    d: f.d,
+    busy: false,
+    save() {},
+    cancel() {},
+  });
+  assert.match(html, /name="label"[^>]*value="Practice 7"/);
+  assert.match(html, /name="scheduled"[^>]*value=""/);
+  assert.ok(html.includes("Start fresh checklists from your templates"));
+  assert.ok(html.includes("earlier inspections stay on their own practice"));
 });
 
 test("dashboard and pit display render manual preparation without fabricated teams, scores or standings", () => {
