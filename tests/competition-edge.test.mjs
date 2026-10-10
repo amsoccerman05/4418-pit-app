@@ -38,7 +38,7 @@ test('feed handler gates origin/auth/active profile and exposes only normalized 
  state.user={id:'member'};state.authError={message:'Invalid token'};assert.equal((await request()).status,401);state.authError=null;state.active=false;assert.equal((await request()).status,403);assert.equal(state.requests.length,0);
  state.active=true;const response=await request({origin:'https://pit.frc4418.org',authorization:'Bearer test'});
  assert.equal(response.status,200);const body=await response.text();assert.ok(!body.includes(secret));assert.ok(!body.includes('upstream HTML'));assert.ok(!body.includes('playoff'));assert.ok(!body.includes('team_key'));
- const feed=JSON.parse(body);assert.equal(feed.configured,true);assert.equal(state.requests.length,8);assert.equal(response.headers.get('access-control-allow-origin'),'https://pit.frc4418.org');
+ const feed=JSON.parse(body);assert.equal(feed.configured,true);assert.equal(state.requests.length,9);assert.equal(response.headers.get('access-control-allow-origin'),'https://pit.frc4418.org');
  assert.deepEqual(feed.standings,{scope:'qualification',rank:7,numTeams:40,record:{wins:5,losses:2,ties:1}});
  assert.equal(feed.standingsAt,state.at);assert.equal(feed.standingsError,null);assert.equal(feed.standingsStale,false);
  const standingsRequest=state.requests.find(r=>r.url.endsWith('/status'));
@@ -57,7 +57,7 @@ test('one event schedule request provides all scouting matches and the unchanged
  assert.equal(feed.tbaAt,state.matchAt);assert.equal(feed.tbaError,null);
  const schedules=state.requests.filter(r=>r.url.includes('/matches/'));
  assert.deepEqual(schedules,[{url:'https://www.thebluealliance.com/api/v3/event/2026test/matches/simple',header:'X-TBA-Auth-Key',key:secret,ttl:60000}]);
- assert.equal(state.requests.length,8);assert.equal(feed.nexus.matches.length,0);assert.equal(feed.standings.rank,7);
+ assert.equal(state.requests.length,9);assert.equal(feed.nexus.matches.length,0);assert.equal(feed.standings.rank,7);
 });
 
 test('event directory uses the existing server credential and is available before schedules or reports',async()=>{

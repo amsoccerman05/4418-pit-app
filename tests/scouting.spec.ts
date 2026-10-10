@@ -602,11 +602,15 @@ test("scouting all-event match selection submits a non-4418 observation without 
   await page
     .getByLabel("Match notes / breakdown detail")
     .fill("Watching team 2002 on blue, independent of our pit schedule.");
-  // Selecting our red-alliance match or a practice must not overwrite the robot being observed.
-  for (const key of ["2026test_qm17", "p1", "2026test_qm4"]) {
+  // Once a station is selected, each match resolves that station and practices require explicit team entry.
+  for (const [key, team] of [
+    ["2026test_qm17", "3648"],
+    ["p1", ""],
+    ["2026test_qm4", "2002"],
+  ]) {
     await loaded.selectOption(key);
     await expect(page.getByLabel("Team number", { exact: true })).toHaveValue(
-      "2002",
+      team,
     );
     await expect(
       page.getByRole("combobox", { name: "Alliance", exact: true }),
@@ -1245,17 +1249,18 @@ test("scouting shared picklist supports reviewed edit and conflict, assignment t
     .click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   await scoutTab(page, "Assignments");
-  await page.getByLabel("Assigned team").fill("1619");
-  await page.getByLabel("Assigned match ID").fill("qm1");
+  await page
+    .getByRole("combobox", { name: "Driver station", exact: true })
+    .selectOption("red2");
   await page
     .getByRole("combobox", { name: "Scout", exact: true })
     .selectOption(otherActorId);
   await page.getByRole("button", { name: "Assign scout", exact: true }).click();
   await expect(page.locator(".scout-record")).toContainText(
-    "Fixture Scout B · Awaiting report",
+    "Fixture Scout B · 0 synced reports",
   );
   fixture.state.observations.push({
-    ...observation(2, 1619),
+    ...observation(2, 1619, { alliance: "red", station: 2 }),
     match_key: "qm1",
     created_by: otherActorId,
   });
@@ -1265,7 +1270,7 @@ test("scouting shared picklist supports reviewed edit and conflict, assignment t
     .click();
   await scoutTab(page, "Assignments");
   await expect(page.locator(".scout-record")).toContainText(
-    "Fixture Scout B · Submitted",
+    "Fixture Scout B · 1 synced reports",
   );
   await page
     .getByRole("button", { name: "Edit assignment", exact: true })
@@ -1277,7 +1282,7 @@ test("scouting shared picklist supports reviewed edit and conflict, assignment t
     .getByRole("button", { name: "Update assignment", exact: true })
     .click();
   await expect(page.locator(".scout-record")).toContainText(
-    "Unassigned · Awaiting report",
+    "Unassigned · 0 synced reports",
   );
   await captureScouting(page, test.info(), "assignments");
   expect(fixture.pageErrors).toEqual([]);
@@ -1491,14 +1496,15 @@ test("scouting student with server-verified leadership can manage shared picks a
     .click();
   await expect(page.locator(".scout-picks")).toContainText("#1 · Team 4418");
   await scoutTab(page, "Assignments");
-  await page.getByLabel("Assigned team").fill("4418");
-  await page.getByLabel("Assigned match ID").fill("qm1");
+  await page
+    .getByRole("combobox", { name: "Driver station", exact: true })
+    .selectOption("red1");
   await page
     .getByRole("combobox", { name: "Scout", exact: true })
     .selectOption(otherActorId);
   await page.getByRole("button", { name: "Assign scout", exact: true }).click();
   await expect(page.locator(".scout-record")).toContainText(
-    "Fixture Scout B · Awaiting report",
+    "Fixture Scout B · 0 synced reports",
   );
   expect(fixture.mutations().map((c) => c.body.action)).toEqual([
     "picklist",

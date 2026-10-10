@@ -11,6 +11,7 @@ function fixture() {
     epas: [
       { event: "2026test", team: 4418, epa: { total_points: { mean: 41.8 } } },
     ],
+    predictions: [],
     map: null,
     mapNotFound: true,
     pits: { 4418: "A1" },
@@ -31,17 +32,19 @@ function fixture() {
   };
   const cached = async (url, header, key, ttl, options) => {
     state.requests.push({ url, header, key, ttl, options });
-    const data = url.includes("statbotics")
-      ? state.epas
-      : url.endsWith("/map")
-        ? state.map
-        : url.endsWith("/pits")
-          ? state.pits
-          : {
-              key: state.event,
-              name: "Fixture event",
-              webcasts: state.webcasts,
-            };
+    const data = url.includes("/v3/matches?")
+      ? state.predictions
+      : url.includes("statbotics")
+        ? state.epas
+        : url.endsWith("/map")
+          ? state.map
+          : url.endsWith("/pits")
+            ? state.pits
+            : {
+                key: state.event,
+                name: "Fixture event",
+                webcasts: state.webcasts,
+              };
     return {
       data,
       at: state.at,
@@ -204,4 +207,55 @@ test("only an actual map 404 clears a validated map, not a malformed HTTP 200 nu
   assert.equal(absent.pitMap, null);
   assert.equal(absent.pitMapAt, state.at);
   assert.equal(absent.pitMapError, null);
+});
+
+test("Statbotics predictions are independently validated and preserve age on failure, clear on success, and never cross events", async () => {
+  const { state, get } = fixture();
+  const prediction = {
+    event: "2026test",
+    key: "2026test_qm17",
+    alliances: {
+      red: { team_keys: [4418, 1, 2] },
+      blue: { team_keys: [3, 4, 5] },
+    },
+    pred: { red_win_prob: 0.7345 },
+  };
+  state.predictions = [prediction];
+  const good = await get();
+  assert.equal(good.matchPredictions[0].redWinProbability, 0.7345);
+  assert.equal(good.predictionsAt, now);
+  assert.equal(good.predictionsError, null);
+  const request = state.requests.find((r) => r.url.includes("/v3/matches?"));
+  assert.deepEqual(request, {
+    url: "https://api.statbotics.io/v3/matches?event=2026test&limit=1000",
+    header: null,
+    key: undefined,
+    ttl: 60000,
+    options: undefined,
+  });
+  state.at += 60001;
+  state.predictions = [{ ...prediction, pred: { red_win_prob: 2 } }];
+  const bad = await get();
+  assert.deepEqual(bad.matchPredictions, good.matchPredictions);
+  assert.equal(bad.predictionsAt, now);
+  assert.ok(bad.predictionsError);
+  assert.equal(bad.epaError, null);
+  const changed = await get("2026other", "other");
+  assert.deepEqual(changed.matchPredictions, []);
+  assert.equal(changed.predictionsAt, null);
+  assert.ok(changed.predictionsError);
+  state.predictions = [{ ...prediction, pred: { red_win_prob: null } }];
+  const unpublished = await get();
+  assert.equal(unpublished.matchPredictions[0].redWinProbability, null);
+  assert.equal(unpublished.predictionsAt, state.at);
+  assert.equal(unpublished.predictionsError, null);
+  state.predictions = [];
+  const empty = await get();
+  assert.deepEqual(empty.matchPredictions, []);
+  assert.equal(empty.predictionsError, null);
+  state.error = "down";
+  const down = await get();
+  assert.deepEqual(down.matchPredictions, []);
+  assert.equal(down.predictionsAt, empty.predictionsAt);
+  assert.ok(down.predictionsError);
 });

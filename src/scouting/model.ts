@@ -15,7 +15,9 @@ export type Assignment = {
   id: string;
   event_id: string;
   kind: Kind;
-  team_number: number;
+  team_number: number | null;
+  alliance?: "red" | "blue" | null;
+  station?: 1 | 2 | 3 | null;
   match_key: string | null;
   assignee_id: string | null;
   version: number;

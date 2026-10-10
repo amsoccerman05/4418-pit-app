@@ -1,0 +1,50 @@
+.comp-win-probability {
+  border-top: 1px solid var(--suite-border, #d7dfe7);
+  padding-top: 1rem;
+  margin-top: 1rem;
+}
+.comp-win-probability h3 {
+  font-size: 1rem;
+  margin: 0 0 0.75rem;
+}
+.comp-win-alliances {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 0.65rem;
+}
+.comp-win-alliance {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  border: 1px solid var(--suite-border, #d7dfe7);
+  border-top: 3px solid;
+  border-radius: 0.5rem;
+  padding: 0.7rem;
+}
+.comp-win-alliance > span {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.comp-win-alliance > strong {
+  font-size: clamp(1.5rem, 4vw, 2.2rem);
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.comp-win-red {
+  border-top-color: #c73c44;
+}
+.comp-win-blue {
+  border-top-color: #357acb;
+}
+.comp-win-alliance small {
+  overflow-wrap: anywhere;
+}
+.comp-win-note {
+  display: block;
+  margin-top: 0.4rem;
+}
+.comp-win-unavailable {
+  font-size: 0.9rem;
+}

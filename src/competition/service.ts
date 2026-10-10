@@ -121,6 +121,9 @@ export type Feed = {
   teamEPAs?: import("../../supabase/functions/competition-feed/statbotics").TeamEPA[];
   epaAt?: number | null;
   epaError?: string | null;
+  matchPredictions?: import("../../supabase/functions/competition-feed/statbotics").MatchPrediction[];
+  predictionsAt?: number | null;
+  predictionsError?: string | null;
   nexusBoard?:
     | import("../../supabase/functions/competition-feed/nexus-board").NexusBoard
     | null;

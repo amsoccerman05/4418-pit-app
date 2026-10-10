@@ -189,6 +189,9 @@ test("scouting migration: immutable evidence, duplicate-safe sync, event isolati
     const originalProfiles = (await owner("select * from profiles order by id"))
       .rows;
     await db.exec(migration("20261010013034_competition_scouting.sql"));
+    await db.exec(
+      migration("20261010142916_scouting_driver_station_assignments.sql"),
+    );
 
     await t.test(
       "additive upgrade preserves Inventory, profiles and all existing public API definitions",
