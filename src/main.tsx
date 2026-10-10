@@ -1,3 +1,4 @@
+import {ScoutingWorkspace} from './scouting/ScoutingWorkspace';
 import {accessFailure,offlineNow,PIT_STALE_MS,PRIVATE_SNAPSHOT_MAX_AGE_MS,UNKNOWN_SAVE} from './connection';
 import {isStale} from './competition/feed-state';
 import {issueRouteId,isIssueRoute,canDismissCompletedEditor} from './issue-route';
@@ -56,7 +57,7 @@ import {
 import "./style.css";
 const teamEmblem = `${import.meta.env.BASE_URL}branding/4418-impulse-emblem.png`;
 const teamWordmark = `${import.meta.env.BASE_URL}branding/4418-impulse-wordmark.png`;
-type Page = "dashboard" | "matches" | "issues" | "batteries" | "checklists" | "admin";
+type Page = "dashboard" | "matches" | "issues" | "batteries" | "checklists" | "scouting" | "admin";
 type Modal =
   | { kind: "report"; matchId?: string }
   | { kind: "issue"; id: string }
@@ -217,7 +218,7 @@ function App() {
     [batteryFilter, setBatteryFilter] = useState("ALL"),
     [search, setSearch] = useState("");
   const accessCurrent=useCallback(()=>demo||(sessionGeneration===accessEpoch.current&&authAllowed.current&&authIdentity.current===userId&&(!expiresAt.current||expiresAt.current>Date.now())),[demo,userId,sessionGeneration]);
-  const competition = useCompetition(profile, data.events.find(e=>e.status==='active')?.id, demo, ['dashboard','matches','admin'].includes(page),sessionGeneration,pitReadOnly,invalidateAccess,accessCurrent,accountRequests.current.signal);
+  const competition = useCompetition(profile, data.events.find(e=>e.status==='active')?.id, demo, ['dashboard','matches','scouting','admin'].includes(page),sessionGeneration,pitReadOnly,invalidateAccess,accessCurrent,accountRequests.current.signal);
   const modalIdentity=useRef<Modal>(modal);modalIdentity.current=modal;
   const [issueHash,setIssueHash]=useState(()=>location.hash);
   useEffect(()=>{const changed=()=>setIssueHash(location.hash);window.addEventListener('hashchange',changed);return()=>window.removeEventListener('hashchange',changed);},[]);
@@ -487,6 +488,7 @@ function App() {
               ["issues", "Robot / Issues", Wrench],
               ["batteries", "Batteries", BatteryIcon],
               ["checklists", "Checklists", Check],
+              ["scouting", "Scouting", Activity],
               ["admin", "Event", Settings],
             ] as const
           ).map(([p, label, Icon]) => (
@@ -547,7 +549,7 @@ function App() {
           {!demo&&<section className={`connection-status ${pitReadOnly?'connection-stale':''}`} data-testid="connection-status" role="status">
             <div><strong>{!online?'Offline · read-only':pitReadOnly?'Pit data may be stale · read-only':loading?'Refreshing pit data…':'Pit data connected'}</strong>
               <p>Last loaded issues / batteries: {lastSyncAt?new Date(lastSyncAt).toLocaleString():'Not loaded'}</p>
-              {(pitReadOnly||dataReadError)&&<p>{uncertainSave?'A save was not confirmed. Refresh and review the record before trying again.':'Showing the last loaded snapshot. Verify status with the pit crew before queueing.'} Changes are never queued.</p>}
+              {(pitReadOnly||dataReadError)&&<p>{uncertainSave?'A save was not confirmed. Refresh and review the record before trying again.':'Showing the last loaded snapshot. Verify status with the pit crew before queueing.'} {page==='scouting'?'Scouting has a separate device-only draft and report queue below.':'Changes are never queued.'}</p>}
               {dataReadError&&online&&<small>{dataReadError}</small>}
             </div><button disabled={loading} onClick={()=>{setError('');void refresh(true);void competition.refresh(true);}}>Retry connection</button>
           </section>}
@@ -580,7 +582,7 @@ function App() {
                     ? "Issue log"
                     : page === "batteries"
                       ? "Battery tracking"
-                      : page === "matches" ? "Matches" : page === "checklists" ? "Checklists" : "Event"}
+                      : page === "scouting" ? "Scouting" : page === "matches" ? "Matches" : page === "checklists" ? "Checklists" : "Event"}
               </h1>
               <p>
                 {page === "dashboard"
@@ -589,7 +591,7 @@ function App() {
                     ? "Report, repair, and get back on the field."
                     : page === "batteries"
                       ? "A clear view of every battery, from charger to robot."
-                      : "Events and competition batteries."}
+                      : page === "scouting" ? "Capture observations and plan your alliance." : "Events and competition batteries."}
               </p>
             </div>
             {page === "batteries"
@@ -620,7 +622,7 @@ function App() {
                   </button>
                 )}
           </div>
-          <div className="event-strip">
+          {page!=='scouting'&&<div className="event-strip">
             <span className="event-icon">
               <MapPin size={20} />
             </span>
@@ -640,7 +642,8 @@ function App() {
                 A mentor or admin can create and activate an event.
               </span>
             )}
-          </div>
+          </div>}
+          {page==='scouting'&&<ScoutingWorkspace key={`${profile.id}:${sessionGeneration}`} profile={profile} data={data} competition={competition} demo={demo} scope={{actorId:profile.id,signal:accountRequests.current.signal,isCurrent:accessCurrent}} onAccessFailure={invalidateAccess}/>}
           {!demo && ['dashboard','matches','checklists','admin'].includes(page) && <CompetitionWorkspace page={page} competition={competition} data={data} dataUpdatedAt={lastSyncAt} dataError={dataReadError} profile={profile} go={go} report={matchId=>setModal({kind:'report',matchId})} openIssue={id=>setModal({kind:'issue',id})} batteryAction={id=>setModal({kind:'battery',id})}/>}
           {demo && ['matches','checklists'].includes(page) && <section className="card"><p>Competition event feeds and shared checklists are available in the signed-in team workspace.</p></section>}
           {page === "dashboard" && (demo || !competition.context?.config && !competition.context?.matches.some(m=>m.source==='manual')) && (

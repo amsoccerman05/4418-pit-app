@@ -2,6 +2,10 @@
 
 A mobile-first competition pit workspace for FRC Team 4418 IMPULSE. This is a separate application from Team 4418 Inventory. It uses the same Supabase Auth users and existing `public.profiles`; it never creates a second user/role system.
 
+## Competition scouting
+
+**Scouting** adds independent 2026 REBUILT match/pit capture, durable device drafts and automatic cloud submission with a durable reconnect queue, team summaries/comparison, assignment coverage and a shared leadership picklist. Read the [scouting quick start, access model and offline limitations](docs/SCOUTING.md). Apply the additive scouting migration before deploying this feature. This is an independently implemented workflow, not an exact Lovat clone or an offline cold-start app.
+
 ## Manual practice matches
 
 Competition leadership can add practice matches in **Matches** without a TBA schedule, then use normal preparation and explicit pre/post checklists. **Add next practice** suggests a reviewable label and opens a clean record with independent checklists. The dashboard’s expandable **Crew quick-start** walks phone users through preparation, battery verification, and post-run inspection. See [manual practice workflow and release requirements](docs/MANUAL-PRACTICE.md).
@@ -68,11 +72,11 @@ No additional migration is needed: the existing `pit_battery_events.match_number
 
 ## Realtime and connection handling
 
-Subscriptions cover issues, batteries, both histories, and event changes, with cleanup on logout/unmount. Profile changes are subscribed when the existing profile publication permits them. A 20-second refresh and focus refresh provide fallback and recheck active profiles. Stale write conflicts are shown rather than silently overwritten. Offline writes are not queued; errors keep forms open. Realtime shows its connection state separately from last refresh time. Changes update the current device after a successful save.
+Subscriptions cover issues, batteries, both histories, and event changes, with cleanup on logout/unmount. Profile changes are subscribed when the existing profile publication permits them. A 20-second refresh and focus refresh provide fallback and recheck active profiles. Stale write conflicts are shown rather than silently overwritten. Safety-critical Pit writes are not queued; errors keep forms open. Scouting submissions use their separate durable reconnect queue. Realtime shows its connection state separately from last refresh time. Changes update the current device after a successful save.
 
 ### Poor-internet read-only view
 
-A loaded signed-in tab keeps its last successful schedule and Pit snapshot readable when internet drops. Offline/stale banners retain original timestamps; readiness changes to **VERIFY STATUS**, and writes are blocked until the connection and current records can be checked. No writes are queued or automatically replayed. Private snapshots stay in memory and clear on sign-out, account change, session expiry, or observed loss of access. This does not provide offline reload/cold-start support. See [behavior, safety, and verification](docs/POOR-INTERNET.md).
+A loaded signed-in tab keeps its last successful schedule and Pit snapshot readable when internet drops. Offline/stale banners retain original timestamps; readiness changes to **VERIFY STATUS**, and writes are blocked until the connection and current records can be checked. No safety-critical Pit writes are queued or automatically replayed. Scouting has a separate cloud-first submission queue described above. Private snapshots stay in memory and clear on sign-out, account change, session expiry, or observed loss of access. This does not provide offline reload/cold-start support. See [behavior, safety, and verification](docs/POOR-INTERNET.md).
 
 ## Repository structure
 
@@ -120,6 +124,6 @@ There is no CNAME file: custom GitHub Actions deployments use the repository Pag
 
 ## V1 boundaries / next iteration
 
-No photos, offline write queue, scouting, match APIs, inventory integration, tasks, analytics, QR codes, or health scoring. Navigation is intentionally simple and does not deep-link individual records. Histories are fully fetched in paginated batches for the initial small team workload; introduce event-scoped queries and incremental history loading if volume grows. Existing user accounts are reused, but browser sessions on separate domains still require their own sign-in. This repository has not changed the live Supabase project or verified its credentials.
+The original Pit V1 excludes photos, inventory integration, QR codes and health scoring. Later competition/scouting modules add schedule feeds, scouting analytics, and a scouting-only offline outbox; safety-critical Pit writes remain online-only. Navigation is intentionally simple and does not deep-link individual records. Histories are fully fetched in paginated batches for the initial small team workload; introduce event-scoped queries and incremental history loading if volume grows. Existing user accounts are reused, but browser sessions on separate domains still require their own sign-in. Production configuration history is documented in the deployment notes.
 
 Recommended next small iteration: run a practice-match session with the pit crew, tune the status labels/actions from their feedback, then add compressed, authenticated issue photos in a separate Pit Storage bucket if needed.
