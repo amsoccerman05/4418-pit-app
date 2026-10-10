@@ -53,6 +53,9 @@ import {
   isAdmin,
   nextBattery,
   batteryMatch,
+  batteryName,
+  batteryReference,
+  nextBatteryNumber,
 } from "./model";
 import "./style.css";
 const teamEmblem = `${import.meta.env.BASE_URL}branding/4418-impulse-emblem.png`;
@@ -692,9 +695,10 @@ function App() {
                     <>
                       <div className="battery-hero">
                         <BatteryIcon size={42} />
-                        <h2>{onRobot[0].battery_number}</h2>
+                        <h2>{batteryName(onRobot[0])}</h2>
                         <Badge value="ON ROBOT" />
                       </div>
+                      <small className="battery-system-reference">System ID: {onRobot[0].battery_number}</small>
                       <BatteryMatchLabel battery={onRobot[0]} data={data} />
                       <p>
                         {(() => {
@@ -834,7 +838,7 @@ function App() {
                         onClick={() => setModal({ kind: "battery", id: b.id })}
                       >
                         <BatteryIcon size={21} />
-                        <strong>{b.battery_number}</strong>
+                        <span className="battery-identity"><strong>{batteryName(b)}</strong><small>System ID: {b.battery_number}</small></span>
                         <Badge value={b.status} />
                       </button>
                     ))}
@@ -956,7 +960,7 @@ function App() {
                         (batteryFilter === "ALL" || b.status === batteryFilter),
                   )
                   .sort((a, b) =>
-                    a.battery_number.localeCompare(b.battery_number),
+                    batteryName(a).localeCompare(batteryName(b), undefined, { numeric: true }) || a.battery_number.localeCompare(b.battery_number),
                   )
                   .map((b) => (
                     <article className="card battery-card" key={b.id}>
@@ -964,8 +968,8 @@ function App() {
                         <BatteryIcon size={25} />
                         <Badge value={b.status} />
                       </div>
-                      <h2>{b.battery_number}</h2>
-                      <p>{b.label || "Competition battery"}</p>
+                      <h2>{batteryName(b)}</h2>
+                      <p className="battery-system-reference">System ID: {b.battery_number}</p>
                       <BatteryMatchLabel battery={b} data={data} />
                       {b.notes && <p className="battery-notes">{b.notes}</p>}
                       <div className="battery-actions">
@@ -1118,9 +1122,9 @@ function App() {
               : modal.kind === "issue"
                 ? `Issue #${issue?.issue_number || ""}`
                 : modal.kind === "batteryAction"
-                  ? `${battery?.battery_number} · ${modal.action === "remove" ? "Remove battery" : modal.action === "install" ? "Install battery" : "Mark ready"}`
+                  ? `${batteryReference(battery)} · ${modal.action === "remove" ? "Remove battery" : modal.action === "install" ? "Install battery" : "Mark ready"}`
                   : modal.kind === "battery"
-                    ? `${battery?.battery_number} · Details & history`
+                    ? `${batteryReference(battery)} · Details & history`
                     : modal.kind === "event"
                       ? "Event details"
                       : "New battery"
@@ -1198,7 +1202,7 @@ function App() {
             />
           )}{" "}
           {modal.kind === "newBattery" && (
-            <BatteryForm busy={writeBusy} submit={(p) => save("save_battery", p)} />
+            <BatteryForm batteries={data.batteries} busy={writeBusy} submit={(p) => save("save_battery", p)} />
           )}
         </Dialog>
       )}
@@ -1349,7 +1353,7 @@ function Report({
               .filter((b) => b.active)
               .map((b) => (
                 <option value={b.id} key={b.id}>
-                  {b.battery_number} · {b.status}
+                  {batteryReference(b)} · {b.status}
                 </option>
               ))}
           </select>
@@ -1411,10 +1415,7 @@ function IssueDetail({
           <p>
             Battery:{" "}
             <strong>
-              {
-                data.batteries.find((b) => b.id === i.battery_id)
-                  ?.battery_number
-              }
+              {batteryReference(data.batteries.find((b) => b.id === i.battery_id))}
             </strong>
           </p>
         )}
@@ -1498,7 +1499,7 @@ function IssueDetail({
                 <option value="">No battery linked</option>
                 {data.batteries.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.battery_number}
+                    {batteryReference(b)}{!b.active ? " · Archived" : ""}
                   </option>
                 ))}
               </select>
@@ -1546,7 +1547,7 @@ function IssueDetail({
                   {k === "assigned_to"
                     ? `${v.from ? name(String(v.from)) : "Unassigned"} → ${v.to ? name(String(v.to)) : "Unassigned"}`
                     : k === "battery_id"
-                      ? `${data.batteries.find((b) => b.id === v.from)?.battery_number || "None"} → ${data.batteries.find((b) => b.id === v.to)?.battery_number || "None"}`
+                      ? `${batteryReference(data.batteries.find((b) => b.id === v.from), v.from ? "Unknown battery" : "None")} → ${batteryReference(data.batteries.find((b) => b.id === v.to), v.to ? "Unknown battery" : "None")}`
                       : `${v.from || "—"} → ${v.to || "—"}`}
                 </p>
               ))}
@@ -1719,7 +1720,7 @@ function BatteryDetail({
     <>
       <div className="detail-summary">
         <Badge value={b.status} />
-        <p>{b.label || "Competition battery"}</p>
+        <p className="battery-system-reference">System ID: {b.battery_number}</p>
         <BatteryMatchLabel battery={b} data={data} />
         {canWork(profile) && b.active && b.status === "ON ROBOT" && (
           <button className="secondary" disabled={busy} onClick={remove}>
@@ -1815,6 +1816,7 @@ function BatteryDetail({
           <BatteryForm
             key={b.updated_at}
             battery={b}
+            batteries={data.batteries}
             busy={busy}
             submit={(p) => save("save_battery", p, false)}
           />
@@ -1934,42 +1936,48 @@ function EventForm({
 }
 function BatteryForm({
   battery: b,
+  batteries,
   busy,
   submit,
 }: {
   battery?: Battery;
+  batteries: Battery[];
   busy: boolean;
   submit: (p: Record<string, unknown>) => Promise<boolean>;
 }) {
-  const [number, setNumber] = useState(b?.battery_number || ""),
+  // Keep this reference across refreshes/uncertain-save retries. A new form gets a new unused code.
+  const [number, setNumber] = useState(() => b?.battery_number || nextBatteryNumber(batteries)),
     [label, setLabel] = useState(b?.label || ""),
     [notes, setNotes] = useState(b?.notes || ""),
     [active, setActive] = useState(b?.active ?? true);
+  const existing = !b ? batteries.find(other => other.battery_number === number) : undefined;
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
+        if (!number || existing || (!b && !label.trim())) return;
         void submit({
           id: b?.id,
           battery_number: number,
-          label,
+          label: label.trim(),
           notes,
           active,
         });
       }}
     >
-      <Field label="Battery number *">
-        <input
-          required
-          pattern="B[0-9]{2,4}"
-          placeholder="B07"
-          value={number}
-          onChange={(e) => setNumber(e.target.value.toUpperCase())}
-        />
+      <Field label={b ? "Battery name" : "Battery name *"}>
+        <input required={!b} value={label} placeholder="Name on the physical battery" onChange={(e) => setLabel(e.target.value)} />
       </Field>
-      <Field label="Label">
-        <input value={label} onChange={(e) => setLabel(e.target.value)} />
+      <p className="form-help">Use the name on the battery.</p>
+      <Field label="System ID">
+        <input readOnly value={number || "No reference available"} />
       </Field>
+      <p className="form-help">Automatic ID. Distinguishes batteries with the same name.</p>
+      {existing && <div className="connection-stale battery-identity-conflict" role="status">
+        <p>This ID is already saved as {batteryReference(existing)}. If this is your battery, close this form.</p>
+        <button type="button" disabled={busy || !nextBatteryNumber(batteries)} onClick={() => setNumber(nextBatteryNumber(batteries))}>Assign a new ID for another battery</button>
+      </div>}
+      {!number && <p className="error" role="alert">No unused system reference is available. Contact an admin before adding another battery.</p>}
       <Field label="Battery notes">
         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
       </Field>
@@ -1989,7 +1997,7 @@ function BatteryForm({
         </p>
       )}
       <div className="form-actions">
-        <button className="primary" disabled={busy}>
+        <button className="primary" disabled={busy || !number || !!existing || (!b && !label.trim())}>
           Save battery
         </button>
       </div>

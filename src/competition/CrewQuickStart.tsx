@@ -124,7 +124,10 @@ export function CrewQuickStart({
           <li>
             <h3>3. After a run</h3>
             <p>
-              Open the finished match in Matches for its post-match inspection.
+              {d.templates.some((t) => t.active && t.kind === "post") ||
+              d.runs.some((r) => r.kind === "post")
+                ? "Open the finished match in Matches for its post-match inspection."
+                : "Review the finished match in Matches."}{" "}
               Finishing a practice does not check off items or remove the
               battery. Tell the pit lead immediately about a robot-stopping
               problem.

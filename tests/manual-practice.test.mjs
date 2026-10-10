@@ -177,7 +177,13 @@ test("completed selection uses explicit manual finish time and retains archived 
 
 function readinessFixture(ops) {
   return {
-    d: { matches: ops, runs: [], items: [], config: null },
+    d: {
+      matches: ops,
+      runs: [],
+      items: [],
+      config: null,
+      templates: [{ id: "post-template", kind: "post", active: true }],
+    },
     data: {
       events: [{ id: "event", status: "active" }],
       issues: [],

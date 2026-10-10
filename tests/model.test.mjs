@@ -92,3 +92,58 @@ test("match labels follow the latest usage cycle rather than measurements or old
     "",
   );
 });
+
+const { batteryName, batteryReference, nextBatteryNumber } =
+  await import("../src/model.ts");
+test("battery names lead display while unnamed and missing references remain clear", () => {
+  const named = { label: "  Sparky  ", battery_number: "B01" };
+  assert.equal(batteryName(named), "Sparky");
+  assert.equal(batteryReference(named), "Sparky (B01)");
+  assert.equal(batteryName({ label: "  ", battery_number: "B07" }), "B07");
+  assert.equal(batteryReference({ battery_number: "B07" }), "B07");
+  assert.equal(
+    batteryReference({ label: "B07", battery_number: "B07" }),
+    "B07",
+  );
+  assert.equal(batteryReference(null), "Unknown battery");
+  assert.equal(batteryReference(undefined, "None"), "None");
+  assert.equal(named.label, "  Sparky  ");
+});
+test("duplicate and long battery names preserve distinct stable references", () => {
+  const batteries = [
+    { label: "Twin", battery_number: "B01" },
+    { label: "Twin", battery_number: "B02" },
+  ];
+  assert.deepEqual(batteries.map(batteryReference), [
+    "Twin (B01)",
+    "Twin (B02)",
+  ]);
+  const long = "LongPhysicalBatteryName".repeat(20);
+  assert.equal(batteryName({ label: long, battery_number: "B03" }), long);
+  assert.equal(
+    batteryReference({ label: long, battery_number: "B03" }),
+    `${long} (B03)`,
+  );
+});
+test("automatic internal battery codes never reuse archived or zero-padded references", () => {
+  assert.equal(nextBatteryNumber([]), "B01");
+  assert.equal(
+    nextBatteryNumber([{ battery_number: "B07", active: false }]),
+    "B01",
+  );
+  assert.equal(
+    nextBatteryNumber([
+      { battery_number: "B001", active: false },
+      { battery_number: "B02" },
+    ]),
+    "B03",
+  );
+  const full = Array.from({ length: 9999 }, (_, n) => ({
+    battery_number: `B${String(n + 1).padStart(2, "0")}`,
+  }));
+  assert.equal(nextBatteryNumber(full), null);
+  assert.equal(
+    nextBatteryNumber(full.filter((b) => b.battery_number !== "B4418")),
+    "B4418",
+  );
+});

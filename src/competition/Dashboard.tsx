@@ -1,3 +1,4 @@
+import { batteryReference } from "../model";
 import { useState } from "react";
 import { isStale } from "./feed-state";
 import { PitDisplay } from "./PitDisplay";
@@ -67,6 +68,7 @@ export function CompetitionDashboard({
     last,
     lastOps,
     postPending,
+    postAvailable,
     reasons,
   } = state;
   const blocking = issues.filter((i) => i.severity === "ROBOT DOWN"),
@@ -247,7 +249,7 @@ export function CompetitionDashboard({
           <p>
             {localStale && `Last recorded: ${readiness} · `}
             {battery
-              ? `Battery ${battery.battery_number} · ${battery.status}`
+              ? `Battery ${batteryReference(battery)} · ${battery.status}`
               : "Battery not assigned"}
             {next ? ` for ${next.label}` : ""}
           </p>
@@ -393,9 +395,11 @@ export function CompetitionDashboard({
               Report issue
             </button>
           )}
-          <small>
-            Inspection and battery handling require your confirmation.
-          </small>
+          {postAvailable && (
+            <small>
+              Inspection and battery handling require your confirmation.
+            </small>
+          )}
         </section>
       )}
       {!!live?.announcements.length && (

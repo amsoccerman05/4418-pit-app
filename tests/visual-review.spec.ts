@@ -42,7 +42,12 @@ test("visual review of issues, forms and empty states", async ({
     .click();
   await page
     .locator("article")
-    .filter({ has: page.getByRole("heading", { name: "B01", exact: true }) })
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Competition battery",
+        exact: true,
+      }),
+    })
     .getByRole("button", { name: "Remove battery", exact: true })
     .click();
   await shot("removal");

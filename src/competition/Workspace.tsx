@@ -1,3 +1,4 @@
+import { batteryReference } from "../model";
 import { competitionReadiness } from "./readiness";
 import { CompetitionDashboard } from "./Dashboard";
 import { useEffect, useRef, useState } from "react";
@@ -501,8 +502,10 @@ export function CompetitionWorkspace({
                 <p>
                   Assigned battery:{" "}
                   <strong>
-                    {data.batteries.find((b) => b.id === ops.battery_id)
-                      ?.battery_number || "None"}
+                    {batteryReference(
+                      data.batteries.find((b) => b.id === ops.battery_id),
+                      ops.battery_id ? "Unknown battery" : "None",
+                    )}
                   </strong>
                 </p>
                 {d.can_manage && !ops.archived_at ? (
@@ -511,6 +514,19 @@ export function CompetitionWorkspace({
                     onSubmit={(e) => {
                       e.preventDefault();
                       const f = new FormData(e.currentTarget);
+                      const field = e.currentTarget.elements.namedItem(
+                        "battery",
+                      ) as HTMLSelectElement;
+                      const chosen = data.batteries.find(
+                        (b) => b.id === f.get("battery"),
+                      );
+                      field.setCustomValidity(
+                        f.get("battery") &&
+                          (!chosen?.active || chosen.status === "RETIRED")
+                          ? "Choose an active battery or Not assigned before saving."
+                          : "",
+                      );
+                      if (!field.reportValidity()) return;
                       act("match", {
                         match_id: ops.id,
                         version: ops.version,
@@ -524,13 +540,27 @@ export function CompetitionWorkspace({
                       <select
                         name="battery"
                         defaultValue={ops.battery_id || ""}
+                        onChange={(e) => e.currentTarget.setCustomValidity("")}
                       >
                         <option value="">Not assigned</option>
+                        {ops.battery_id &&
+                          !data.batteries.some(
+                            (b) => b.id === ops.battery_id,
+                          ) && (
+                            <option value={ops.battery_id}>
+                              Unknown battery · Current assignment unavailable
+                            </option>
+                          )}
                         {data.batteries
-                          .filter((b) => b.active && b.status !== "RETIRED")
+                          .filter(
+                            (b) =>
+                              (b.active && b.status !== "RETIRED") ||
+                              b.id === ops.battery_id,
+                          )
                           .map((b) => (
                             <option key={b.id} value={b.id}>
-                              {b.battery_number} · {b.status}
+                              {batteryReference(b)} ·{" "}
+                              {!b.active ? "Archived" : b.status}
                             </option>
                           ))}
                       </select>
@@ -559,15 +589,16 @@ export function CompetitionWorkspace({
                   </button>
                 )}
               </section>
-              {completed && (
-                <section className="card">
-                  <h2>Start post-match inspection</h2>
-                  <p>
-                    Record inspection and battery removal yourself. Finishing a
-                    match completes no physical action or checklist item.
-                  </p>
-                </section>
-              )}
+              {completed &&
+                d.templates.some((t) => t.active && t.kind === "post") && (
+                  <section className="card">
+                    <h2>Start post-match inspection</h2>
+                    <p>
+                      Record inspection and battery removal yourself. Finishing
+                      a match completes no physical action or checklist item.
+                    </p>
+                  </section>
+                )}
               {(!ops.archived_at || completed) && (
                 <RunStarter
                   key={`${ops.id}:${completed}`}
@@ -875,6 +906,7 @@ function RunStarter({
 }) {
   const [id, setId] = useState("");
   const choices = d.templates.filter((t) => t.active && t.kind === kind);
+  if (kind === "post" && !choices.length) return null;
   return (
     <section className="card">
       <h3>

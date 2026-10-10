@@ -37,7 +37,7 @@ test("loaded private pit data stays readable offline, disables writes and refres
     exact: true,
   });
   await expect(display).toContainText("Q17");
-  await expect(display).toContainText("B01");
+  await expect(display).toContainText("Snapshot battery (B01)");
   await expect(display).toContainText("VERIFY STATUS");
   await captureOfflineState(page, test.info(), "offline-pit-display", false);
   await page
@@ -46,7 +46,7 @@ test("loaded private pit data stays readable offline, disables writes and refres
 
   await navigate(page, "Batteries");
   await expect(
-    page.getByRole("heading", { name: "B01", exact: true }),
+    page.getByRole("heading", { name: "Snapshot battery", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText("Private battery notes", { exact: true }),
@@ -283,6 +283,7 @@ test("account switch clears private snapshots and ignores an older in-flight res
       ...fixture.data.pit_batteries[0],
       id: "battery-two",
       battery_number: "B99",
+      label: "Second account battery",
       notes: "Second account battery",
     },
   ];
@@ -305,13 +306,13 @@ test("account switch clears private snapshots and ignores an older in-flight res
   ).toBeVisible();
   await navigate(page, "Batteries");
   await expect(
-    page.getByRole("heading", { name: "B99", exact: true }),
+    page.getByRole("heading", { name: "Second account battery", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText("Private battery notes", { exact: true }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: "B01", exact: true }),
+    page.getByRole("heading", { name: "Snapshot battery", exact: true }),
   ).toHaveCount(0);
   await assertPrivateDataNotPersisted(page);
 });

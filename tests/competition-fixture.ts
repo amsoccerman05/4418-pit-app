@@ -13,7 +13,7 @@ export async function setup(page:Page,manager=true){
  else if(path==='feed')result=feed;
  else if(path==='rpc/pit_competition_context')result=context;
  else if(path==='rpc/pit_competition_manage'){
- calls.push(p);if(p.action==='match'){if(!p.p.match_id){context.matches.push({id:'ops',event_id:'event',match_key:match.key,battery_id:null,note:'',version:1});result='ops';}else Object.assign(context.matches[0],p.p,{version:2});}
+ calls.push(p);if(p.action==='match'){if(!p.p.match_id){context.matches.push({id:'ops',event_id:'event',match_key:match.key,battery_id:null,note:'',version:1});result='ops';}else Object.assign(context.matches[0],p.p,{battery_id:p.p.battery_id||null,version:2});}
  if(p.action==='run'){context.runs.push({id:'run',match_id:'ops',name:context.templates[0].name,kind:context.templates[0].kind,template_version:1,started_at:new Date().toISOString()});context.items.push({id:'item',run_id:'run',text:'Latch check',required:true,blocking:true,completed_at:null,completed_by:null,display_order:0,version:1});}
  if(p.action==='item')Object.assign(context.items[0],{completed_at:p.p.complete?new Date().toISOString():null,completed_by:'person',version:2});
  if(p.action==='template'){context.templates.push({...p.p,id:'new',version:1});}

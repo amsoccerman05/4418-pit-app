@@ -1,4 +1,4 @@
-import type { Data } from "../model";
+import { batteryReference, type Data } from "../model.ts";
 import type { Context, Match } from "./service";
 import { operationalReadiness } from "../../supabase/functions/competition-feed/external.ts";
 
@@ -39,11 +39,20 @@ export function competitionReadiness(d: Context, data: Data, matches: Match[]) {
   );
   const last = latestCompletedMatch(matches, d.matches),
     lastOps = d.matches.find((o) => o.match_key === last?.key);
+  const hasPostTemplate =
+    d.templates?.some((t) => t.active && t.kind === "post") ?? false;
+  const postAvailable =
+    hasPostTemplate ||
+    (!!lastOps &&
+      d.runs.some((r) => r.kind === "post" && r.match_id === lastOps.id));
   const needsPost = (match: OperationalMatch) => {
     const matchOps = d.matches.find((o) => o.match_key === match.key);
     const post = d.runs.filter(
       (r) => r.kind === "post" && r.match_id === matchOps?.id,
     );
+    // No configured workflow means no inspection is owed. Existing runs keep
+    // their snapshot obligations even after their template is disabled.
+    if (!hasPostTemplate && !post.length) return false;
     return (
       !post.length ||
       d.items.some(
@@ -102,7 +111,7 @@ export function competitionReadiness(d: Context, data: Data, matches: Match[]) {
       batteryReadiness = "blocked";
       reasons.push({
         key: "battery",
-        text: `Battery ${battery.battery_number} · ${!battery.active ? "inactive" : battery.status} · not ready for ${next.label}`,
+        text: `Battery ${batteryReference(battery)} · ${!battery.active ? "inactive" : battery.status} · not ready for ${next.label}`,
         blocking: true,
         batteryId: battery.id,
       });
@@ -110,7 +119,7 @@ export function competitionReadiness(d: Context, data: Data, matches: Match[]) {
       batteryReadiness = "attention";
       reasons.push({
         key: "battery",
-        text: `Install assigned battery ${battery.battery_number} for ${next.label}`,
+        text: `Install assigned battery ${batteryReference(battery)} for ${next.label}`,
         blocking: false,
         batteryId: battery.id,
       });
@@ -119,7 +128,7 @@ export function competitionReadiness(d: Context, data: Data, matches: Match[]) {
       batteryReadiness = "blocked";
       reasons.push({
         key: "battery-mismatch",
-        text: `Installed battery ${installed.map((b) => b.battery_number).join(", ")} does not match the single assignment for ${next.label}. Confirm battery swap.`,
+        text: `Installed battery ${installed.map((b) => batteryReference(b)).join(", ")} does not match the single assignment for ${next.label}. Confirm battery swap.`,
         blocking: true,
         matchKey: next.key,
       });
@@ -152,6 +161,7 @@ export function competitionReadiness(d: Context, data: Data, matches: Match[]) {
     last,
     lastOps,
     postPending,
+    postAvailable,
   };
 }
 export type Readiness = ReturnType<typeof competitionReadiness>;

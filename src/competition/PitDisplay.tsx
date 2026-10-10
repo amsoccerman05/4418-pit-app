@@ -1,3 +1,4 @@
+import { batteryReference } from "../model";
 import { useEffect, useRef } from "react";
 import { issueOwner, type Data } from "../model";
 import { liveFor, type Competition } from "./service";
@@ -155,7 +156,7 @@ export function PitDisplay({
             Installed:{" "}
             <strong>
               {installed.length
-                ? installed.map((b) => b.battery_number).join(", ")
+                ? installed.map((b) => batteryReference(b)).join(", ")
                 : "None recorded"}
             </strong>
           </p>
@@ -163,7 +164,7 @@ export function PitDisplay({
             Assigned{next ? ` to ${next.label}` : ""}:{" "}
             <strong>
               {battery
-                ? `${battery.battery_number} · ${battery.status}`
+                ? `${batteryReference(battery)} · ${battery.status}`
                 : "None"}
             </strong>
           </p>

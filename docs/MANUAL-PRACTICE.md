@@ -10,7 +10,7 @@ After the robot has finished its practice, leadership chooses **Finish practice 
 
 - Open, unarchived manual practices take preparation priority over official matches. Practices are ordered by optional scheduled time, then label (numeric order) and immutable key. Finish or archive an open practice to move to the next preparation target. Official matches and qualification standings remain separately visible.
 - Manual preparation uses the same assigned/installed battery and checklist readiness rules as official matches. The dashboard and pit display share that calculation.
-- Every finished manual practice needs its own post-match inspection. Starting or finishing a later practice cannot hide an earlier missing inspection. Archiving does not clear that obligation or any incomplete required/blocking checklist items.
+- Finished practices require post-match inspection when an active post-match template is configured or an inspection run already exists. With neither, no inspection warning or start prompt is shown. Disabling a template never hides an existing incomplete inspection. Starting or finishing a later practice and archiving do not clear existing required/blocking checklist items.
 - Archive only removes the practice from the active list. **Show matches → Archived** retains its details, issue links, and checklist history. Existing checks can still be completed; a finished archived practice can still start its post-match inspection. Restore returns it to the active list.
 - Label/time edits leave the immutable `manual:<UUID>` identity and existing checklist snapshots intact. Active labels are case-insensitively unique per event. Renaming a practice does not rewrite prior audit history.
 
