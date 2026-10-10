@@ -348,6 +348,8 @@ export async function captureScouting(
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+  // Fixed suite bars should be captured at the document origin, not at the last control clicked.
+  await page.evaluate(() => window.scrollTo(0, 0));
   const path = info.outputPath(`scouting-${name}-${info.project.name}.png`);
   await page.screenshot({
     path,
