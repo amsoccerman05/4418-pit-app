@@ -59,7 +59,10 @@ test("station assignment creation, six labels, duplicate slot, repeat scout warn
     station: 2,
     assignee_id: actorId,
   });
-  await expect(picker.locator("option[value=red2]")).toBeDisabled();
+  await expect(picker.locator("option[value=red2]")).toHaveJSProperty(
+    "disabled",
+    true,
+  );
   await picker.selectOption("blue1");
   await page
     .getByRole("combobox", { name: "Scout", exact: true })
@@ -229,6 +232,9 @@ test("legacy match and pit assignments remain readable and editable without conv
   await page
     .getByRole("button", { name: "Update assignment", exact: true })
     .click();
+  await expect(
+    page.locator(".scout-record").filter({ hasText: "Team 4418 · qm1" }),
+  ).toContainText("Fixture Scout B");
   expect(f.state.assignments[0]).toMatchObject({
     team_number: 4418,
     match_key: "qm1",
@@ -242,9 +248,9 @@ test("legacy match and pit assignments remain readable and editable without conv
     .getByRole("combobox", { name: "Scout", exact: true })
     .selectOption(actorId);
   await page.getByRole("button", { name: "Assign scout", exact: true }).click();
-  await expect(page.locator(".scout-record").last()).toContainText(
-    "Team 7001 · Pit",
-  );
+  await expect(
+    page.locator(".scout-record").filter({ hasText: "Team 7001 · Pit" }),
+  ).toHaveCount(1);
   expect(f.state.assignments).toHaveLength(3);
 });
 
