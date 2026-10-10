@@ -2,9 +2,47 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
-import {parseMatches,parseNexus,liveFor,nextMatch,operationalReadiness} from '../supabase/functions/competition-feed/external.ts';
+import {parseEventMatches,parseEventTeams,parseMatches,parseNexus,liveFor,nextMatch,operationalReadiness} from '../supabase/functions/competition-feed/external.ts';
 import {createCache} from '../supabase/functions/competition-feed/cache.ts';
 const raw={key:'2026test_qm17',event_key:'2026test',comp_level:'qm',set_number:1,match_number:17,time:1800000000,predicted_time:1800000300,actual_time:null,winning_alliance:'',alliances:{red:{team_keys:['frc4418','frc1619','frc1339'],score:-1},blue:{team_keys:['frc2996','frc3648','frc4593'],score:-1}}};
+test('event team directory normalizes names, deduplicates and sorts without requiring a schedule',()=>{
+ const impulse={key:'frc4418',team_number:4418,nickname:'  IMPULSE\n Robotics  ',name:'Full sponsor name',city:'Private unused field'};
+ const rows=[impulse,{...impulse,nickname:'Conflicting duplicate'}, {key:'frc2',team_number:2,nickname:'\t ',name:'  Full\u0000 Name\t'}, {key:'frc1',team_number:1}, {key:'frc2',team_number:2,nickname:'Later duplicate'}, {key:'frc1',team_number:1,name:'One'}, {key:'frc99999',team_number:99999,nickname:42,name:false}];
+ assert.deepEqual(parseEventTeams(rows),[{key:'frc1',number:1,name:'One'},{key:'frc2',number:2,name:'Full Name'},{key:'frc4418',number:4418,name:'IMPULSE Robotics'},{key:'frc99999',number:99999,name:null}]);
+ assert.equal(parseEventTeams([{...impulse,nickname:'x'.repeat(500)}])[0].name.length,200);
+ assert.equal(parseEventTeams([{...impulse,nickname:null,name:'y'.repeat(500)}])[0].name.length,200);
+ assert.deepEqual(parseEventTeams([]),[]);
+});
+test('event team directory rejects malformed envelopes and filters invalid team identities',()=>{
+ for(const response of [null,undefined,{},'teams',123])assert.throws(()=>parseEventTeams(response),/Invalid TBA team response/);
+ const valid={key:'frc4418',team_number:4418,nickname:'IMPULSE'};
+ const malformed=[null,{},[],false,'frc4418',...['4418',0,-1,1.5,NaN,Infinity,100000,Number.MAX_SAFE_INTEGER+1].map(team_number=>({...valid,team_number,key:`frc${team_number}`})),...['frc04418','FRC4418','4418','frc4418b','frc4418 ',null,4418,'frc1'].map(key=>({...valid,key}))];
+ assert.throws(()=>parseEventTeams(malformed),/Invalid TBA team response/);
+ assert.deepEqual(parseEventTeams([...malformed,valid]),[{key:'frc4418',number:4418,name:'IMPULSE'}]);
+});
+test('all-event scouting keeps every alliance while operational matches stay team-only',()=>{
+ const other={...raw,key:'2026test_qm1',match_number:1,alliances:{red:{team_keys:['frc1','frc2','frc3'],score:0},blue:{team_keys:['frc4','frc5','frc6'],score:12}},winning_alliance:'blue',actual_time:1800000000};
+ const blue={...raw,key:'2026test_qm18',match_number:18,alliances:{red:raw.alliances.blue,blue:raw.alliances.red}};
+ const final={...other,key:'2026test_f1m2',comp_level:'f',set_number:1,match_number:2};
+ const all=parseEventMatches([final,blue,raw,other],'2026test',4418);
+ assert.deepEqual(all.map(m=>m.key),['2026test_qm1','2026test_qm17','2026test_qm18','2026test_f1m2']);
+ assert.deepEqual(all.map(m=>m.alliance),[null,'red','blue',null]);
+ assert.deepEqual(all[0].red,['1','2','3']);assert.deepEqual(all[0].blue,['4','5','6']);
+ assert.equal(all[0].redScore,0);assert.equal(all[0].blueScore,12);assert.equal(all[0].winner,'blue');assert.equal(all[0].completed,true);assert.equal(all[0].actual,1800000000000);assert.equal(all[3].label,'F1–2');
+ const operations=parseMatches([final,blue,raw,other],'2026test',4418);
+ assert.deepEqual(operations,all.filter(m=>m.alliance!==null));assert.equal(nextMatch(operations).key,raw.key);
+ assert.deepEqual(parseEventMatches([raw],'2026test')[0].alliance,null);
+ assert.deepEqual(parseMatches([other,final],'2026test',4418),[]);
+});
+test('event schedules reject malformed envelopes and discard invalid or cross-event rows',()=>{
+ for(const response of [null,{},'matches'])assert.throws(()=>parseEventMatches(response,'2026test',4418),/Invalid TBA match response/);
+ const invalid=[null,{}, {...raw,event_key:'2026other'}, {...raw,key:'2026other_qm17'}, {...raw,key:'2026test_qm99'}, {...raw,comp_level:'pm'}, {...raw,match_number:'17'}, {...raw,match_number:0}, {...raw,set_number:null}, {...raw,alliances:null}, {...raw,alliances:{red:raw.alliances.red}}, {...raw,alliances:{red:raw.alliances.red,blue:{team_keys:'frc2996'}}}, {...raw,alliances:{...raw.alliances,red:{team_keys:['frc4418',null]}}}, {...raw,alliances:{...raw.alliances,red:{team_keys:['frc4418','untrusted-team']}}}];
+ assert.deepEqual(parseEventMatches(invalid,'2026test',4418),[]);
+ assert.deepEqual(parseEventMatches([...invalid,raw],'2026test',4418),parseEventMatches([raw],'2026test',4418));
+ assert.deepEqual(parseMatches([...invalid,raw],'2026test',4418),parseMatches([raw],'2026test',4418));
+ const unresolved={...raw,key:'2026test_sf1m1',comp_level:'sf',match_number:1,time:null,predicted_time:0,actual_time:'1800000000',alliances:{red:{team_keys:[],score:-1},blue:{team_keys:[],score:null}}};
+ const [m]=parseEventMatches([unresolved],'2026test',4418);assert.equal(m.alliance,null);assert.equal(m.scheduled,null);assert.equal(m.predicted,null);assert.equal(m.actual,null);assert.equal(m.completed,false);assert.equal(m.redScore,null);assert.equal(m.blueScore,null);
+});
 test('verified TBA/Nexus fields, null times, scores, next match and conservative matching',()=>{
  const [m]=parseMatches([raw,{...raw,key:'2026other_qm17',event_key:'2026other'}],'2026test',4418);assert.equal(m.scheduled,1800000000000);assert.equal(m.alliance,'red');assert.equal(m.completed,false);assert.equal(nextMatch([m]).key,m.key);
  const live=parseNexus({eventKey:'demo1234',dataAsOfTime:1800000000000,nowQueuing:'Qualification 17',matches:[{label:'Qualification 17',status:'On deck',redTeams:m.red,blueTeams:m.blue,times:{estimatedStartTime:1800000500000,estimatedQueueTime:null}}],announcements:[{id:'a',announcement:'Lunch',postedTime:1800000000000}]},'demo1234',4418);
@@ -18,6 +56,24 @@ test('ETag caching, missing credentials, shared requests and outage retain last 
  assert.equal((await cache('event','X-TBA-Auth-Key',undefined,60)).data,null);assert.equal(n,0);
  await Promise.all([cache('event','X-TBA-Auth-Key','server-only',60),cache('event','X-TBA-Auth-Key','server-only',60)]);assert.equal(n,1);now+=61;const checked=await cache('event','X-TBA-Auth-Key','server-only',60);assert.equal(checked.at,now);assert.equal(n,2);
  now+=61;fail=true;const stale=await cache('event','X-TBA-Auth-Key','server-only',60);assert.equal(stale.data[0].key,raw.key);assert.ok(stale.error);assert.equal(stale.at,checked.at);
+});
+test('event roster cache uses ETags and event-specific keys with shared reads and stale fallback',async()=>{
+ const url='https://www.thebluealliance.com/api/v3/event/2026test/teams/simple',other=url.replace('2026test','2026other'),rawTeams=[{key:'frc4418',team_number:4418,nickname:'IMPULSE'}];
+ let reads=0,now=1800000000000,offline=false;
+ const cached=createCache(async(request,options)=>{
+  reads++;assert.equal(options.headers['X-TBA-Auth-Key'],'server-only');
+  if(offline)throw new Error('Offline');
+  assert.equal(request,url);
+  if(reads>1){assert.equal(options.headers['If-None-Match'],'teams-v1');return new Response(null,{status:304});}
+  return new Response(JSON.stringify(rawTeams),{headers:{etag:'teams-v1'}});
+ },()=>now);
+ const get=(event=url,key='server-only')=>cached(event,'X-TBA-Auth-Key',key,300000);
+ assert.equal((await cached(url,'X-TBA-Auth-Key',undefined,300000)).data,null);assert.equal(reads,0);
+ const [first,shared]=await Promise.all([get(),get()]);assert.equal(reads,1);assert.deepEqual(first,shared);assert.deepEqual(parseEventTeams(first.data),[{key:'frc4418',number:4418,name:'IMPULSE'}]);
+ now+=299999;assert.equal((await get()).at,first.at);assert.equal(reads,1);
+ now+=2;const fresh=await get();assert.equal(reads,2);assert.equal(fresh.at,now);assert.equal(fresh.error,null);
+ now+=300001;offline=true;const stale=await get();assert.equal(reads,3);assert.equal(stale.at,fresh.at);assert.ok(stale.error);assert.deepEqual(parseEventTeams(stale.data),parseEventTeams(first.data));
+ const isolated=await get(other);assert.equal(isolated.data,null);assert.ok(isolated.error);assert.equal(isolated.at,0);
 });
 test('readiness blocks physical issues/incomplete blocking items without completing work from results',()=>{
  const optional={required:false,blocking:false,completed_at:null};assert.equal(operationalReadiness([],[],false),'NEEDS ATTENTION');assert.equal(operationalReadiness([],[optional],true),'READY');assert.equal(operationalReadiness([],[{...optional,required:true}],true),'NEEDS ATTENTION');assert.equal(operationalReadiness([],[{...optional,blocking:true}],true),'NOT READY');assert.equal(operationalReadiness([{status:'DEFERRED',severity:'ROBOT DOWN'}],[],true),'NOT READY');assert.equal(operationalReadiness([{status:'TESTING',severity:'HIGH'}],[],true),'NEEDS ATTENTION');

@@ -67,3 +67,92 @@ test("visible feed must match the current config even before the next provider r
     assert.equal(feedMatchesConfig(old, { ...config, ...changed }), false);
   assert.equal(feedMatchesConfig(old, null), false);
 });
+
+test("all-event and pit views keep a coherent same-config snapshot through outages", () => {
+  const prior = {
+    ...old,
+    scoutingMatches: [{ key: "one" }, { key: "other-team" }],
+  };
+  const failed = {
+    ...prior,
+    matches: [],
+    scoutingMatches: [],
+    tbaAt: null,
+    tbaError: "TBA unavailable",
+  };
+  const held = mergeFeed(prior, failed);
+  assert.deepEqual(held.matches, prior.matches);
+  assert.deepEqual(held.scoutingMatches, prior.scoutingMatches);
+  assert.equal(held.tbaAt, prior.tbaAt);
+  assert.deepEqual(
+    mergeFeed(prior, { ...failed, tbaError: null, tbaAt: 2000 })
+      .scoutingMatches,
+    [],
+  );
+  for (const changed of [
+    { eventId: "new" },
+    { eventKey: "2026new" },
+    { team: 1234 },
+    { configVersion: 2 },
+  ])
+    assert.deepEqual(
+      mergeFeed(prior, { ...failed, ...changed }).scoutingMatches,
+      [],
+    );
+  const allOnly = {
+    ...failed,
+    scoutingMatches: [{ key: "other-team" }],
+    tbaAt: 2000,
+  };
+  const coherent = mergeFeed(prior, allOnly);
+  assert.deepEqual(coherent.matches, []);
+  assert.deepEqual(coherent.scoutingMatches, allOnly.scoutingMatches);
+  assert.equal(coherent.tbaAt, 2000);
+});
+
+test("older feed deployments do not masquerade as the entire event schedule", () => {
+  const prior = {
+    ...old,
+    scoutingMatches: [{ key: "one" }, { key: "other-team" }],
+  };
+  const legacy = { ...old, tbaAt: 2000 };
+  assert.equal(mergeFeed(prior, legacy).scoutingMatches, undefined);
+  const failed = { ...old, matches: [], tbaAt: null, tbaError: "unavailable" };
+  assert.deepEqual(
+    mergeFeed(prior, failed).scoutingMatches,
+    prior.scoutingMatches,
+  );
+});
+
+test("event roster retains only same-event failed snapshots and clears successful empty or legacy responses", () => {
+  const previous = {
+    ...old,
+    eventTeams: [{ number: 4418, name: "IMPULSE", key: "frc4418" }],
+    teamsAt: 1000,
+  };
+  const failed = {
+    ...old,
+    eventTeams: [],
+    teamsAt: null,
+    teamsError: "unavailable",
+  };
+  const retained = mergeFeed(previous, failed);
+  assert.deepEqual(retained.eventTeams, previous.eventTeams);
+  assert.equal(retained.teamsAt, 1000);
+  assert.equal(retained.teamsError, "unavailable");
+  for (const change of [
+    { eventId: "new" },
+    { eventKey: "2026new" },
+    { team: 9999 },
+    { configVersion: 2 },
+  ])
+    assert.deepEqual(
+      mergeFeed(previous, { ...failed, ...change }).eventTeams,
+      [],
+    );
+  assert.deepEqual(
+    mergeFeed(previous, { ...failed, teamsError: null }).eventTeams,
+    [],
+  );
+  assert.equal(mergeFeed(previous, old).eventTeams, undefined);
+});

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Data, Profile } from "../model";
-import type { Competition } from "../competition/service";
+import type { Competition, EventMatch } from "../competition/service";
+import { isStale } from "../competition/feed-state";
 import type { PitScope } from "../pit-rpc";
 import { useScouting } from "./service";
 import {
@@ -23,6 +24,8 @@ import {
   type Pick,
 } from "./model";
 import "./scouting.css";
+import { optionLabel, fieldHelp, ratingLabel } from "./labels";
+import { withEventTeams, type DirectorySummary } from "./directory";
 
 type Props = {
   profile: Profile;
@@ -126,8 +129,7 @@ function ScoutingEvent({
       import("./model").Assignment | null
     >(null),
     [localError, setLocalError] = useState("");
-  const reports = currentReports(s.context?.observations || []),
-    summaries = summarize(s.context?.observations || []);
+  const reports = currentReports(s.context?.observations || []);
   const pending = s.outbox.filter((o) => o.status !== "synced");
   const newDraft = (kind: Kind, source?: Observation) => {
     setNotice("");
@@ -168,10 +170,31 @@ function ScoutingEvent({
       void s.sync();
     }
   };
-  const schedule =
-    eventId === competition.context?.config?.event_id
-      ? competition.feed?.matches || []
-      : [];
+  const scheduleFeed =
+    eventId === competition.context?.config?.event_id ? competition.feed : null;
+  const summaries = withEventTeams(
+    summarize(s.context?.observations || []),
+    scheduleFeed?.eventTeams,
+  );
+  const filteredTeams = summaries.filter((x) =>
+    `${x.team} ${x.name || ""}`
+      .toLowerCase()
+      .includes(search.trim().toLowerCase()),
+  );
+  const rosterLoaded =
+    Array.isArray(scheduleFeed?.eventTeams) && !!scheduleFeed?.teamsAt;
+  const rosterStale =
+    !s.online ||
+    !!competition.feedError ||
+    !!scheduleFeed?.teamsError ||
+    isStale(scheduleFeed?.teamsAt, competition.tick);
+  const wholeEvent = Array.isArray(scheduleFeed?.scoutingMatches);
+  const schedule = scheduleFeed?.scoutingMatches ?? scheduleFeed?.matches ?? [];
+  const scheduleStale =
+    !s.online ||
+    !!competition.feedError ||
+    !!scheduleFeed?.tbaError ||
+    isStale(scheduleFeed?.tbaAt, competition.tick);
   const practices =
     competition.context?.matches.filter(
       (m) => m.event_id === eventId && m.source === "manual" && !m.archived_at,
@@ -312,6 +335,11 @@ function ScoutingEvent({
               close={() => setDraft(null)}
               schedule={schedule}
               practices={practices}
+              wholeEvent={wholeEvent}
+              scheduleStale={scheduleStale}
+              scheduleAt={scheduleFeed?.tbaAt ?? null}
+              refreshSchedule={() => void competition.refresh(true)}
+              refreshingSchedule={competition.refreshing}
               disabled={!active || !s.canScout}
             />
           ) : (
@@ -381,10 +409,9 @@ function ScoutingEvent({
             <label>
               Find a team
               <input
-                inputMode="numeric"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Team number"
+                placeholder="Team number or name"
               />
             </label>
             <button
@@ -399,41 +426,72 @@ function ScoutingEvent({
             >
               Export reports CSV
             </button>
-            <button onClick={() => void s.refresh()}>Refresh team data</button>
+            <button
+              disabled={competition.refreshing}
+              onClick={() => {
+                void s.refresh();
+                void competition.refresh(true);
+              }}
+            >
+              Refresh team data
+            </button>
           </div>
+          <p
+            className={
+              rosterStale && rosterLoaded ? "connection-stale" : "scout-caveat"
+            }
+            role="status"
+          >
+            {rosterLoaded
+              ? `${scheduleFeed!.eventTeams!.length} teams listed by TBA. ${rosterStale ? "Roster may be outdated; refresh when connected." : "Roster up to date."}`
+              : competition.refreshing
+                ? "Loading event teams from TBA…"
+                : eventId !== competition.context?.config?.event_id
+                  ? "No TBA roster is linked to this scouting event. Synced report teams still appear below."
+                  : "Event roster unavailable. Refresh to retry; synced report teams still appear below."}
+            {scheduleFeed?.teamsAt
+              ? ` Last roster update ${new Date(scheduleFeed.teamsAt).toLocaleTimeString()}.`
+              : ""}{" "}
+            Team names and numbers come from TBA. Performance data comes only
+            from our synced scouting reports.
+          </p>
           <p className="scout-caveat">
             Observed fuel is not official points: inactive-hub fuel does not
             score. Averages weight each observed match equally, averaging
             multiple scouts within a match. Unknown values are excluded.
           </p>
           <div className="scout-team-grid">
-            {summaries
-              .filter((x) => String(x.team).includes(search))
-              .map((x) => (
-                <TeamCard
-                  key={x.team}
-                  value={x}
-                  selected={selected.includes(x.team)}
-                  toggle={() =>
-                    setSelected((v) =>
-                      v.includes(x.team)
-                        ? v.filter((t) => t !== x.team)
-                        : v.length < 6
-                          ? [...v, x.team]
-                          : v,
-                    )
-                  }
-                  detail={() => setTeamDetail(x.team)}
-                />
-              ))}
+            {filteredTeams.map((x) => (
+              <TeamCard
+                key={x.team}
+                value={x}
+                selected={selected.includes(x.team)}
+                toggle={() =>
+                  setSelected((v) =>
+                    v.includes(x.team)
+                      ? v.filter((t) => t !== x.team)
+                      : v.length < 6
+                        ? [...v, x.team]
+                        : v,
+                  )
+                }
+                detail={() => setTeamDetail(x.team)}
+              />
+            ))}
           </div>
-          {!summaries.length && (
+          {!filteredTeams.length && (
             <section className="card">
-              <h3>No synced observations yet</h3>
+              <h3>
+                {summaries.length
+                  ? "No teams match your search"
+                  : "No event teams loaded yet"}
+              </h3>
               <p>
-                Sync the first scouting report to start team summaries.
-                Device-only reports are excluded from team analysis.
+                {summaries.length
+                  ? "Try a team number or name."
+                  : "Teams appear when TBA publishes the event roster or when a scouting report syncs. You can still enter any team number in Scout."}
               </p>
+              <p>Device-only reports are excluded from shared team analysis.</p>
             </section>
           )}
           {teamDetail !== null && (
@@ -724,52 +782,81 @@ function ScoutForm({
   close,
   schedule,
   practices,
+  wholeEvent,
+  scheduleStale,
+  scheduleAt,
+  refreshSchedule,
+  refreshingSchedule,
   disabled,
 }: {
   draft: StoredScoutingDraft;
   change: (d: ScoutingDraftPayload) => void;
   queue: () => void;
   close: () => void;
-  schedule: NonNullable<Competition["feed"]>["matches"];
+  schedule: EventMatch[];
   practices: NonNullable<Competition["context"]>["matches"];
+  wholeEvent: boolean;
+  scheduleStale: boolean;
+  scheduleAt: number | null;
+  refreshSchedule: () => void;
+  refreshingSchedule: boolean;
   disabled: boolean;
 }) {
   const d = draft.data;
   const set = (key: string, value: unknown) =>
     change({ ...draft, data: { ...d, [key]: value } });
   const select = (key: keyof typeof choices, title: string) => (
-    <label>
-      {title}
-      <select
-        value={String(d[key] ?? "unknown")}
-        onChange={(e) => set(key, e.target.value)}
-      >
-        {choices[key].map((v) => (
-          <option key={v} value={v}>
-            {label(v)}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div>
+      <label>
+        {title}
+        <select
+          aria-describedby={fieldHelp[key] ? `scout-help-${key}` : undefined}
+          value={String(d[key] ?? "unknown")}
+          onChange={(e) => set(key, e.target.value)}
+        >
+          {choices[key].map((v) => (
+            <option key={v} value={v}>
+              {optionLabel(key, v)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {fieldHelp[key] && (
+        <small id={`scout-help-${key}`}>
+          {draft.kind === "pit" && key === "traversal"
+            ? "Which routes the team says its robot can use. None means neither route."
+            : draft.kind === "pit" && key === "intake"
+              ? "Where the team says its robot can collect fuel. Neither means no intake capability."
+              : fieldHelp[key]}
+        </small>
+      )}
+    </div>
   );
   const rating = (key: string, title: string) => (
-    <label>
-      {title}
-      <select
-        value={d[key] === null ? "" : String(d[key])}
-        onChange={(e) =>
-          set(key, e.target.value ? Number(e.target.value) : null)
-        }
-      >
-        <option value="">Not observed</option>
-        {[1, 2, 3, 4, 5].map((n) => (
-          <option key={n} value={n}>
-            {n}
-            {n === 1 ? " · Low" : n === 5 ? " · High" : ""}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div>
+      <label>
+        {title}
+        <select
+          aria-describedby={`scout-help-${key}`}
+          value={d[key] === null ? "" : String(d[key])}
+          onChange={(e) =>
+            set(key, e.target.value ? Number(e.target.value) : null)
+          }
+        >
+          <option value="">Not rated</option>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <option key={n} value={n}>
+              {ratingLabel(key, n)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <small id={`scout-help-${key}`}>
+        {key === "defense"
+          ? "Leave unrated if it did not play defense or you could not judge its impact."
+          : "Rate only if you saw enough driving. Unrated is excluded from the average."}
+      </small>
+    </div>
   );
   const count = (key: string, title: string) => (
     <div className="scout-counter">
@@ -791,7 +878,7 @@ function ScoutForm({
             min="0"
             max="999"
             value={d[key] === null ? "" : String(d[key])}
-            placeholder="?"
+            placeholder="—"
             onChange={(e) =>
               set(key, e.target.value === "" ? null : Number(e.target.value))
             }
@@ -817,16 +904,22 @@ function ScoutForm({
           className="scout-text-button"
           onClick={() => set(key, 0)}
         >
-          Observed zero
+          Set 0 fuel
         </button>
         <button
           type="button"
           className="scout-text-button"
           onClick={() => set(key, null)}
         >
-          Not observed
+          Couldn’t count
         </button>
       </div>
+      <small>
+        {d[key] === null
+          ? "No count recorded. Leave blank if you missed the action."
+          : "Fuel count recorded."}{" "}
+        Use 0 only if you watched and saw no fuel go in.
+      </small>
     </div>
   );
   return (
@@ -850,6 +943,10 @@ function ScoutForm({
           ? "Record what the team tells you; these are not observed match results."
           : "Record fuel entering the hub, including estimates. These are not official points."}
       </small>
+      <p className="scout-caveat">
+        Blank or unknown means you haven’t recorded an answer or couldn’t tell.
+        It does not mean zero, no attempt, or a poor rating.
+      </p>
       <fieldset disabled={disabled}>
         <div className="scout-form-grid">
           <label>
@@ -871,45 +968,67 @@ function ScoutForm({
           </label>
           {draft.kind === "match" && (
             <>
-              <label>
-                Choose a loaded match
-                <select
-                  disabled={!!draft.supersedes_id}
-                  value=""
-                  onChange={(e) => {
-                    const m = schedule.find((m) => m.key === e.target.value);
-                    const p = practices.find(
-                      (m) => m.match_key === e.target.value,
-                    );
-                    if (m || p)
-                      change({
-                        ...draft,
-                        match_key: normalizeMatchKey(e.target.value),
-                        data: {
-                          ...d,
-                          match_label:
-                            m?.label || p?.manual_label || e.target.value,
-                        },
-                      });
-                  }}
-                >
-                  <option value="">Manual entry / select…</option>
-                  {schedule.map((m) => (
-                    <option key={m.key} value={m.key}>
-                      {m.label} · {m.red.join("/")} vs {m.blue.join("/")}
-                    </option>
-                  ))}
-                  {practices.map((m) => (
-                    <option key={m.id} value={m.match_key}>
-                      {m.manual_label} · Practice
-                    </option>
-                  ))}
-                </select>
-                <small>
-                  Loaded 4418 schedule and practices. Enter any other match
-                  below.
+              <div>
+                <label>
+                  Choose a loaded match
+                  <select
+                    aria-describedby="scout-schedule-status"
+                    disabled={!!draft.supersedes_id}
+                    value=""
+                    onChange={(e) => {
+                      const m = schedule.find((m) => m.key === e.target.value);
+                      const p = practices.find(
+                        (m) => m.match_key === e.target.value,
+                      );
+                      if (m || p)
+                        change({
+                          ...draft,
+                          match_key: normalizeMatchKey(e.target.value),
+                          data: {
+                            ...d,
+                            match_label:
+                              m?.label || p?.manual_label || e.target.value,
+                          },
+                        });
+                    }}
+                  >
+                    <option value="">Manual entry / select…</option>
+                    {schedule.map((m) => (
+                      <option key={m.key} value={m.key}>
+                        {m.label} · Red {m.red.join("/")} vs Blue{" "}
+                        {m.blue.join("/")}
+                      </option>
+                    ))}
+                    {practices.map((m) => (
+                      <option key={m.id} value={m.match_key}>
+                        {m.manual_label} · Practice
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <small id="scout-schedule-status">
+                  {wholeEvent
+                    ? "All event matches from TBA, plus saved practices."
+                    : "Limited schedule: only the pit team’s matches are loaded, plus saved practices."}
+                  {scheduleStale
+                    ? " Last loaded schedule may be stale."
+                    : " Updates from TBA can take about a minute."}
+                  {scheduleAt
+                    ? ` Last snapshot ${new Date(scheduleAt).toLocaleTimeString()}.`
+                    : " No TBA schedule has loaded yet."}{" "}
+                  Select the team you are watching separately. You can also
+                  enter a match below.
                 </small>
-              </label>
+                <button
+                  type="button"
+                  disabled={refreshingSchedule}
+                  onClick={refreshSchedule}
+                >
+                  {refreshingSchedule
+                    ? "Refreshing matches…"
+                    : "Refresh matches"}
+                </button>
+              </div>
               <label>
                 Match ID
                 <input
@@ -950,7 +1069,7 @@ function ScoutForm({
                     )
                   }
                 >
-                  <option value="">Not observed</option>
+                  <option value="">Choose station (if known)</option>
                   {[1, 2, 3].map((n) => (
                     <option key={n}>{n}</option>
                   ))}
@@ -1058,7 +1177,7 @@ function ScoutForm({
           </strong>
           <p>
             {draft.kind === "match"
-              ? `AUTO ${d.auto_fuel ?? "unknown"} fuel · TELEOP ${d.teleop_fuel ?? "unknown"} fuel · Endgame ${label(String(d.endgame))}`
+              ? `AUTO ${d.auto_fuel ?? "unknown"} fuel · TELEOP ${d.teleop_fuel ?? "unknown"} fuel · Endgame ${optionLabel("endgame", String(d.endgame))}`
               : "Team-reported pit capabilities. Unknown values remain blank."}
           </p>
           <button type="button" className="primary" onClick={queue}>
@@ -1079,7 +1198,7 @@ function TeamCard({
   toggle,
   detail,
 }: {
-  value: Summary;
+  value: DirectorySummary;
   selected: boolean;
   toggle: () => void;
   detail: () => void;
@@ -1092,6 +1211,12 @@ function TeamCard({
           {s.matches} matches · {s.reports} reports
         </span>
       </div>
+      {s.name && <p className="scout-team-name">{s.name}</p>}
+      {!s.observations.length && (
+        <p className="scout-caveat">
+          <strong>Not scouted yet</strong> · No synced match or pit reports.
+        </p>
+      )}
       <div className="scout-metrics">
         <div>
           <strong>{fmt(s.fuel)}</strong>
@@ -1143,6 +1268,9 @@ function TeamDetail({
         <h3>Team {value.team} · reports & notes</h3>
         <button onClick={close}>Close reports</button>
       </div>
+      {!value.observations.length && (
+        <p>Not scouted yet. Synced match and pit reports will appear here.</p>
+      )}
       {value.observations
         .slice()
         .sort((a, b) => b.created_at.localeCompare(a.created_at))

@@ -11,7 +11,888 @@ import {
   fillMatch,
   emitScoutingAuth,
   captureScouting,
+  refreshScoutingMatches,
+  refreshScoutingTeams,
 } from "./scouting-fixture";
+
+const eventTeams = [
+  { key: "frc1619", number: 1619, name: "Fixture Alpha Robotics" },
+  { key: "frc4418", number: 4418, name: "Fixture Impulse" },
+  { key: "frc7001", number: 7001, name: null },
+];
+
+test("scouting event roster appears before reports or schedules, supports name search, and never invents performance", async ({
+  page,
+}) => {
+  const fixture = await setupScouting(page, {
+    feed: { eventTeams, matches: [], scoutingMatches: [] },
+  });
+  await scoutTab(page, "Teams");
+  await expect(page.locator(".scout-team h3")).toHaveText([
+    "Team 1619",
+    "Team 4418",
+    "Team 7001",
+  ]);
+  await expect(
+    page
+      .locator(".scouting [role=status]")
+      .filter({ hasText: "teams listed by TBA" }),
+  ).toContainText("3 teams listed by TBA. Roster up to date.");
+  await expect(page.locator(".scouting")).toContainText(
+    "Team names and numbers come from TBA. Performance data comes only from our synced scouting reports.",
+  );
+  await expect(
+    page.getByRole("button", { name: "Export reports CSV", exact: true }),
+  ).toBeDisabled();
+  for (const card of await page.locator(".scout-team").all()) {
+    await expect(card).toContainText("Not scouted yet");
+    await expect(card).toContainText("0 matches · 0 reports");
+    await expect(card.locator(".scout-metrics strong")).toHaveText([
+      "—",
+      "—",
+      "—",
+    ]);
+    await expect(card).toContainText("Driver — · Defense —");
+  }
+  await captureScouting(page, test.info(), "unscouted-event-roster");
+  const search = page.getByLabel("Find a team", { exact: true });
+  await expect(search).toHaveAttribute("placeholder", "Team number or name");
+  await search.fill("  aLPHa  ");
+  await expect(page.locator(".scout-team h3")).toHaveText(["Team 1619"]);
+  await expect(page.locator(".scout-team-name")).toHaveText(
+    "Fixture Alpha Robotics",
+  );
+  await search.fill("7001");
+  await expect(page.locator(".scout-team h3")).toHaveText(["Team 7001"]);
+  await expect(page.locator(".scout-team-name")).toHaveCount(0);
+  await search.fill("no such fixture team");
+  await expect(page.locator(".scout-team")).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", {
+      name: "No teams match your search",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await search.fill("Impulse");
+  await page
+    .locator(".scout-team")
+    .getByRole("button", { name: "Compare", exact: true })
+    .click();
+  await scoutTab(page, "Compare");
+  await expect(
+    page.getByRole("row", { name: /^Avg total fuel/ }).getByRole("cell"),
+  ).toHaveText(["—"]);
+  await expect(
+    page.getByRole("row", { name: /^Driver \(1–5\)/ }).getByRole("cell"),
+  ).toHaveText(["—"]);
+  expect(fixture.state.observations).toHaveLength(0);
+  expect(fixture.mutations()).toHaveLength(0);
+  expect(fixture.pageErrors).toEqual([]);
+});
+
+test("scouting first synced report enriches the existing roster card and retains report-only and manually entered teams", async ({
+  page,
+}) => {
+  const fixture = await setupScouting(page, {
+    feed: { eventTeams },
+    observations: [observation(1, 9001, { drive: "swerve" }, "pit")],
+  });
+  await scoutTab(page, "Teams");
+  await expect(page.locator(".scout-team h3")).toHaveText([
+    "Team 1619",
+    "Team 4418",
+    "Team 7001",
+    "Team 9001",
+  ]);
+  const rosterCard = page.locator(".scout-team").filter({
+    has: page.getByRole("heading", { name: "Team 1619", exact: true }),
+  });
+  const pitCard = page.locator(".scout-team").filter({
+    has: page.getByRole("heading", { name: "Team 9001", exact: true }),
+  });
+  await expect(rosterCard).toContainText("Not scouted yet");
+  await expect(pitCard).toContainText("Pit report available");
+  await expect(pitCard).not.toContainText("Not scouted yet");
+  await expect(pitCard.locator(".scout-metrics strong")).toHaveText([
+    "—",
+    "—",
+    "—",
+  ]);
+  await scoutTab(page, "Scout");
+  await fillMatch(page, "1619", "qm21");
+  await page.getByLabel("AUTO fuel", { exact: true }).fill("0");
+  await page.getByLabel("TELEOP fuel", { exact: true }).fill("12");
+  await page
+    .getByRole("button", { name: "Submit report", exact: true })
+    .click();
+  await expect(
+    page
+      .locator(".scouting [role=status]")
+      .filter({ hasText: "Synced to the team database." }),
+  ).toBeVisible();
+  await scoutTab(page, "Teams");
+  await expect(rosterCard).toHaveCount(1);
+  await expect(rosterCard).toContainText("Fixture Alpha Robotics");
+  await expect(rosterCard).not.toContainText("Not scouted yet");
+  await expect(rosterCard).toContainText("1 matches · 1 reports");
+  await expect(rosterCard.locator(".scout-metrics strong").first()).toHaveText(
+    "12.0",
+  );
+  await expect(page.locator(".scout-team")).toHaveCount(4);
+  await scoutTab(page, "Scout");
+  await fillMatch(page, "8888", "p9");
+  await page
+    .getByRole("button", { name: "Submit report", exact: true })
+    .click();
+  await expect.poll(() => fixture.state.observations.length).toBe(3);
+  await scoutTab(page, "Teams");
+  await expect(page.locator(".scout-team h3")).toHaveText([
+    "Team 1619",
+    "Team 4418",
+    "Team 7001",
+    "Team 8888",
+    "Team 9001",
+  ]);
+  const manualCard = page.locator(".scout-team").filter({
+    has: page.getByRole("heading", { name: "Team 8888", exact: true }),
+  });
+  await expect(manualCard.locator(".scout-metrics strong").first()).toHaveText(
+    "—",
+  );
+  await expect(manualCard).toContainText("1 matches · 1 reports");
+  await expect(pitCard).toContainText("Pit report available");
+  await captureScouting(page, test.info(), "mixed-event-roster");
+  expect(fixture.submissions()).toHaveLength(2);
+  expect(fixture.pageErrors).toEqual([]);
+});
+
+test("scouting failed team refresh retains roster with a stale warning and successful empty roster keeps synced report teams", async ({
+  page,
+}) => {
+  const fixture = await setupScouting(page, {
+    feed: { eventTeams },
+    observations: [observation(1, 9001, { auto_fuel: 0, teleop_fuel: 0 })],
+  });
+  await scoutTab(page, "Teams");
+  await expect(page.locator(".scout-team")).toHaveCount(4);
+  const rosterStatus = page
+    .locator(".scouting [role=status]")
+    .filter({ hasText: "teams listed by TBA" });
+  fixture.feed.eventTeams = [];
+  fixture.feed.teamsAt = null;
+  fixture.feed.teamsError = "Synthetic roster outage";
+  fixture.state.observations.push(
+    observation(2, 1619, { auto_fuel: 5, teleop_fuel: 7 }),
+  );
+  await refreshScoutingTeams(page);
+  await expect(page.locator(".scout-team h3")).toHaveText([
+    "Team 1619",
+    "Team 4418",
+    "Team 7001",
+    "Team 9001",
+  ]);
+  await expect(rosterStatus).toContainText(
+    "Roster may be outdated; refresh when connected.",
+  );
+  await expect(rosterStatus).toContainText("Last roster update");
+  const updated = page.locator(".scout-team").filter({
+    has: page.getByRole("heading", { name: "Team 1619", exact: true }),
+  });
+  await expect(updated).toContainText("Fixture Alpha Robotics");
+  await expect(updated.locator(".scout-metrics strong").first()).toHaveText(
+    "12.0",
+  );
+  fixture.feed.teamsError = null;
+  fixture.feed.teamsAt = Date.now();
+  await refreshScoutingTeams(page);
+  await expect(page.locator(".scout-team h3")).toHaveText([
+    "Team 1619",
+    "Team 9001",
+  ]);
+  await expect(rosterStatus).toContainText(
+    "0 teams listed by TBA. Roster up to date.",
+  );
+  await expect(rosterStatus).not.toContainText("Roster may be outdated");
+  await expect(updated.locator(".scout-metrics strong").first()).toHaveText(
+    "12.0",
+  );
+  const reportOnly = page.locator(".scout-team").filter({
+    has: page.getByRole("heading", { name: "Team 9001", exact: true }),
+  });
+  await expect(reportOnly.locator(".scout-metrics strong").first()).toHaveText(
+    "0.0",
+  );
+  expect(fixture.mutations()).toHaveLength(0);
+  expect(fixture.pageErrors).toEqual([]);
+});
+
+test("scouting historical teams and in-flight event changes never mix event rosters", async ({
+  page,
+}) => {
+  const fixture = await setupScouting(page, {
+    feed: { eventTeams },
+    observations: [
+      observation(1, 9001),
+      { ...observation(2, 8001), event_id: historicalEventId },
+    ],
+  });
+  await scoutTab(page, "Teams");
+  await expect(page.locator(".scout-team")).toHaveCount(4);
+  await page.getByLabel("Scouting event").selectOption(historicalEventId);
+  await scoutTab(page, "Teams");
+  await expect(page.locator(".scout-team h3")).toHaveText(["Team 8001"]);
+  await expect(page.locator(".scouting")).toContainText(
+    "No TBA roster is linked to this scouting event.",
+  );
+  await page.getByLabel("Scouting event").selectOption(eventId);
+  await scoutTab(page, "Teams");
+  await expect(page.locator(".scout-team")).toHaveCount(4);
+  fixture.data.pit_events[0].status = "completed";
+  fixture.data.pit_events[1].status = "active";
+  fixture.competition.config = {
+    ...fixture.competition.config,
+    event_id: historicalEventId,
+    tba_event_key: "2026previous",
+    version: 2,
+  };
+  Object.assign(fixture.feed, {
+    eventId: historicalEventId,
+    eventKey: "2026previous",
+    eventName: "Synthetic Previous Event",
+    configVersion: 2,
+    matches: [],
+    scoutingMatches: [],
+    eventTeams: [
+      { key: "frc8002", number: 8002, name: "Fixture Previous Event Robots" },
+    ],
+    teamsAt: Date.now(),
+    teamsError: null,
+  });
+  const held = fixture.holdNext("feed");
+  await page.getByRole("button", { name: "Refresh data", exact: true }).click();
+  await held.started;
+  await page.getByLabel("Scouting event").selectOption(historicalEventId);
+  await scoutTab(page, "Teams");
+  await expect(page.locator(".scout-team h3")).toHaveText(["Team 8001"]);
+  await expect(page.locator(".scouting")).not.toContainText(
+    "Fixture Alpha Robotics",
+  );
+  await held.release();
+  await expect(page.locator(".scout-team h3")).toHaveText([
+    "Team 8001",
+    "Team 8002",
+  ]);
+  await expect(page.locator(".scout-team-name")).toHaveText(
+    "Fixture Previous Event Robots",
+  );
+  await page.getByLabel("Scouting event").selectOption(eventId);
+  await scoutTab(page, "Teams");
+  await expect(page.locator(".scout-team h3")).toHaveText(["Team 9001"]);
+  expect(fixture.mutations()).toHaveLength(0);
+  expect(fixture.pageErrors).toEqual([]);
+});
+
+test("scouting legacy feed retains report-only teams when the event directory is unavailable", async ({
+  page,
+}) => {
+  const fixture = await setupScouting(page, {
+    legacyFeed: true,
+    observations: [observation(1, 9001)],
+  });
+  await scoutTab(page, "Teams");
+  await expect(page.locator(".scout-team h3")).toHaveText(["Team 9001"]);
+  await expect(page.locator(".scouting")).toContainText(
+    "Event roster unavailable. Refresh to retry; synced report teams still appear below.",
+  );
+  await expect(page.locator(".scout-team")).not.toContainText(
+    "Not scouted yet",
+  );
+  await expect(
+    page.locator(".scout-team .scout-metrics strong").first(),
+  ).toHaveText("—");
+  expect(fixture.mutations()).toHaveLength(0);
+  expect(fixture.pageErrors).toEqual([]);
+});
+
+test("scouting form explains contextual unknowns, rating anchors, zero fuel, and distinct climb outcomes", async ({
+  page,
+}) => {
+  const fixture = await setupScouting(page);
+  await fillMatch(page);
+  await expect(page.locator(".scout-form")).toContainText(
+    "Blank or unknown means you haven’t recorded an answer or couldn’t tell. It does not mean zero, no attempt, or a poor rating.",
+  );
+  for (const [name, unknown] of [
+    ["Alliance", "Choose alliance"],
+    ["Starting position", "Start unseen / unsure"],
+    ["AUTO climb", "Choose climb result"],
+    ["Endgame climb", "Choose climb result"],
+    ["Estimated shooting accuracy", "Accuracy unknown"],
+    ["Primary role", "Choose main role"],
+    ["Intake source", "Intake source unknown"],
+    ["Field traversal", "Traversal unknown"],
+  ]) {
+    const field = page.getByRole("combobox", { name, exact: true });
+    await expect(field).toHaveValue("unknown");
+    await expect(field.locator('option[value="unknown"]')).toHaveText(unknown);
+    await expect(field).toHaveAccessibleDescription(/.+/);
+  }
+  await expect(
+    page
+      .getByRole("combobox", { name: "Station", exact: true })
+      .locator('option[value=""]'),
+  ).toHaveText("Choose station (if known)");
+  await expect(
+    page
+      .getByRole("combobox", { name: "Driver ability · 1–5", exact: true })
+      .locator("option"),
+  ).toHaveText([
+    "Not rated",
+    "1 · Struggled with control",
+    "2 · Inconsistent control",
+    "3 · Steady driving",
+    "4 · Fast and controlled",
+    "5 · Excellent precision",
+  ]);
+  await expect(
+    page
+      .getByRole("combobox", {
+        name: "Defense effectiveness · 1–5",
+        exact: true,
+      })
+      .locator("option"),
+  ).toHaveText([
+    "Not rated",
+    "1 · Little impact",
+    "2 · Some disruption",
+    "3 · Slowed opponent",
+    "4 · Often stopped cycles",
+    "5 · Very effective defense",
+  ]);
+  await expect(
+    page.getByRole("combobox", { name: "Driver ability · 1–5", exact: true }),
+  ).toHaveAccessibleDescription(
+    "Rate only if you saw enough driving. Unrated is excluded from the average.",
+  );
+  await expect(
+    page.getByRole("combobox", {
+      name: "Defense effectiveness · 1–5",
+      exact: true,
+    }),
+  ).toHaveAccessibleDescription(
+    "Leave unrated if it did not play defense or you could not judge its impact.",
+  );
+  for (const title of ["AUTO fuel", "TELEOP fuel"]) {
+    const counter = page.locator(".scout-counter").filter({ hasText: title });
+    await expect(
+      counter.getByRole("button", { name: "Set 0 fuel", exact: true }),
+    ).toBeVisible();
+    await expect(
+      counter.getByRole("button", { name: "Couldn’t count", exact: true }),
+    ).toBeVisible();
+    await expect(counter).toContainText(
+      "Use 0 only if you watched and saw no fuel go in.",
+    );
+  }
+  for (const title of ["AUTO climb", "Endgame climb"]) {
+    const climb = page.getByRole("combobox", { name: title, exact: true });
+    await expect(climb.locator('option[value="not_attempted"]')).toHaveText(
+      "Did not attempt a climb",
+    );
+    await expect(climb.locator('option[value="failed"]')).toHaveText(
+      "Attempted, but failed",
+    );
+  }
+  await expect(
+    page
+      .getByRole("combobox", { name: "Endgame climb", exact: true })
+      .locator('option[value="L3"]'),
+  ).toHaveText("Reached Level 3");
+  await captureScouting(page, test.info(), "clear-match-labels");
+  await page.getByRole("button", { name: "Close draft", exact: true }).click();
+  await page
+    .getByRole("button", { name: "New pit report", exact: true })
+    .click();
+  for (const [name, unknown] of [
+    ["Drivetrain", "Drivetrain unknown"],
+    ["Claimed highest climb", "Climb capability unknown"],
+    ["Intake source", "Intake source unknown"],
+    ["Field traversal", "Traversal unknown"],
+  ]) {
+    const field = page.getByRole("combobox", { name, exact: true });
+    await expect(field).toHaveValue("unknown");
+    await expect(field.locator('option[value="unknown"]')).toHaveText(unknown);
+  }
+  expect(fixture.mutations()).toHaveLength(0);
+  expect(fixture.pageErrors).toEqual([]);
+});
+
+test("scouting clearer labels preserve null versus zero and climb codes through draft reload, submission, and correction", async ({
+  page,
+}) => {
+  const fixture = await setupScouting(page);
+  await fillMatch(page, "1619", "qm22");
+  const auto = page.locator(".scout-counter").filter({ hasText: "AUTO fuel" });
+  const teleop = page
+    .locator(".scout-counter")
+    .filter({ hasText: "TELEOP fuel" });
+  await auto.getByRole("button", { name: "Set 0 fuel", exact: true }).click();
+  await teleop.getByRole("button", { name: "Set 0 fuel", exact: true }).click();
+  await expect(page.getByLabel("TELEOP fuel", { exact: true })).toHaveValue(
+    "0",
+  );
+  await teleop
+    .getByRole("button", { name: "Couldn’t count", exact: true })
+    .click();
+  await expect(page.getByLabel("TELEOP fuel", { exact: true })).toHaveValue("");
+  await page
+    .getByRole("combobox", { name: "Driver ability · 1–5", exact: true })
+    .selectOption({ label: "1 · Struggled with control" });
+  await page
+    .getByRole("combobox", { name: "Defense effectiveness · 1–5", exact: true })
+    .selectOption({ label: "5 · Very effective defense" });
+  await page
+    .getByRole("combobox", { name: "Defense effectiveness · 1–5", exact: true })
+    .selectOption({ label: "Not rated" });
+  await page
+    .getByRole("combobox", { name: "AUTO climb", exact: true })
+    .selectOption({ label: "Did not attempt a climb" });
+  await page
+    .getByRole("combobox", { name: "Endgame climb", exact: true })
+    .selectOption({ label: "Attempted, but failed" });
+  await page.getByRole("button", { name: "Close draft", exact: true }).click();
+  await page.reload();
+  await navigateScouting(page);
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
+  await expect(page.getByLabel("AUTO fuel", { exact: true })).toHaveValue("0");
+  await expect(page.getByLabel("TELEOP fuel", { exact: true })).toHaveValue("");
+  await expect(
+    page.getByRole("combobox", { name: "Driver ability · 1–5", exact: true }),
+  ).toHaveValue("1");
+  await expect(
+    page.getByRole("combobox", {
+      name: "Defense effectiveness · 1–5",
+      exact: true,
+    }),
+  ).toHaveValue("");
+  await expect(
+    page.getByRole("combobox", { name: "AUTO climb", exact: true }),
+  ).toHaveValue("not_attempted");
+  await expect(
+    page.getByRole("combobox", { name: "Endgame climb", exact: true }),
+  ).toHaveValue("failed");
+  await page
+    .getByRole("button", { name: "Submit report", exact: true })
+    .click();
+  await expect(
+    page
+      .locator(".scouting [role=status]")
+      .filter({ hasText: "Synced to the team database." }),
+  ).toBeVisible();
+  const original = fixture.state.observations[0];
+  expect(original.data).toMatchObject({
+    schema_version: 1,
+    auto_fuel: 0,
+    teleop_fuel: null,
+    driver: 1,
+    defense: null,
+    auto_climb: "not_attempted",
+    endgame: "failed",
+    start_position: "unknown",
+    alliance: "unknown",
+    station: null,
+  });
+  await scoutTab(page, "Teams");
+  await page
+    .getByRole("button", { name: "Reports & notes", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Correct this report", exact: true })
+    .click();
+  await expect(page.getByLabel("AUTO fuel", { exact: true })).toHaveValue("0");
+  await expect(page.getByLabel("TELEOP fuel", { exact: true })).toHaveValue("");
+  await auto
+    .getByRole("button", { name: "Couldn’t count", exact: true })
+    .click();
+  await teleop.getByRole("button", { name: "Set 0 fuel", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "Driver ability · 1–5", exact: true })
+    .selectOption({ label: "Not rated" });
+  await page
+    .getByRole("combobox", { name: "Defense effectiveness · 1–5", exact: true })
+    .selectOption({ label: "5 · Very effective defense" });
+  await page
+    .getByRole("combobox", { name: "AUTO climb", exact: true })
+    .selectOption({ label: "Attempted, but failed" });
+  await page
+    .getByRole("combobox", { name: "Endgame climb", exact: true })
+    .selectOption({ label: "Did not attempt a climb" });
+  await page
+    .getByRole("button", { name: "Submit report", exact: true })
+    .click();
+  await expect.poll(() => fixture.state.observations.length).toBe(2);
+  const corrected = fixture.state.observations[1];
+  expect(corrected.id).not.toBe(original.id);
+  expect(corrected.supersedes_id).toBe(original.id);
+  expect(corrected.data).toMatchObject({
+    auto_fuel: null,
+    teleop_fuel: 0,
+    driver: null,
+    defense: 5,
+    auto_climb: "failed",
+    endgame: "not_attempted",
+  });
+  expect(original.data).toMatchObject({
+    auto_fuel: 0,
+    teleop_fuel: null,
+    driver: 1,
+    defense: null,
+  });
+  await scoutTab(page, "Teams");
+  await expect(page.locator(".scout-team")).toContainText(
+    "1 matches · 1 reports",
+  );
+  await expect(page.locator(".scout-team")).toContainText(
+    "Driver — · Defense 5.0",
+  );
+  await expect(
+    page.locator(".scout-team .scout-metrics strong").first(),
+  ).toHaveText("—");
+  expect(fixture.submissions()).toHaveLength(2);
+  expect(fixture.pageErrors).toEqual([]);
+});
+
+test("scouting all-event match selection submits a non-4418 observation without assigning the scout's team or alliance", async ({
+  page,
+}) => {
+  const fixture = await setupScouting(page);
+  await fillMatch(page, "2002", "qmmanual");
+  const loaded = page.getByLabel("Choose a loaded match");
+  await expect(loaded.locator('option[value="2026test_qm4"]')).toHaveText(
+    "Q4 · Red 1001/1002/1003 vs Blue 2001/2002/2003",
+  );
+  await expect(loaded.locator('option[value="p1"]')).toHaveText(
+    "Practice 1 · Practice",
+  );
+  await expect(page.locator(".scouting")).toContainText(
+    "All event matches from TBA, plus saved practices.",
+  );
+  await loaded.selectOption("2026test_qm4");
+  await expect(page.getByLabel("Match ID", { exact: true })).toHaveValue(
+    "2026test_qm4",
+  );
+  await expect(page.getByLabel("Match label", { exact: true })).toHaveValue(
+    "Q4",
+  );
+  await expect(page.getByLabel("Team number", { exact: true })).toHaveValue(
+    "2002",
+  );
+  await expect(
+    page.getByRole("combobox", { name: "Alliance", exact: true }),
+  ).toHaveValue("unknown");
+  await expect(
+    page.getByRole("combobox", { name: "Station", exact: true }),
+  ).toHaveValue("");
+  await page
+    .getByRole("combobox", { name: "Alliance", exact: true })
+    .selectOption("blue");
+  await page
+    .getByRole("combobox", { name: "Station", exact: true })
+    .selectOption("2");
+  await page
+    .getByLabel("Match notes / breakdown detail")
+    .fill("Watching team 2002 on blue, independent of our pit schedule.");
+  // Selecting our red-alliance match or a practice must not overwrite the robot being observed.
+  for (const key of ["2026test_qm17", "p1", "2026test_qm4"]) {
+    await loaded.selectOption(key);
+    await expect(page.getByLabel("Team number", { exact: true })).toHaveValue(
+      "2002",
+    );
+    await expect(
+      page.getByRole("combobox", { name: "Alliance", exact: true }),
+    ).toHaveValue("blue");
+    await expect(
+      page.getByRole("combobox", { name: "Station", exact: true }),
+    ).toHaveValue("2");
+  }
+  await captureScouting(page, test.info(), "all-event-capture");
+  await page
+    .getByRole("button", { name: "Submit report", exact: true })
+    .click();
+  await expect(
+    page
+      .locator(".scouting [role=status]")
+      .filter({ hasText: "Synced to the team database." }),
+  ).toBeVisible();
+  expect(fixture.submissions()).toHaveLength(1);
+  expect(fixture.submissions()[0].body.p).toMatchObject({
+    event_id: eventId,
+    kind: "match",
+    team_number: 2002,
+    match_key: "2026test_qm4",
+    data: {
+      match_label: "Q4",
+      alliance: "blue",
+      station: 2,
+      notes: "Watching team 2002 on blue, independent of our pit schedule.",
+    },
+  });
+  expect(fixture.state.observations).toHaveLength(1);
+  expect(fixture.pageErrors).toEqual([]);
+});
+
+test("scouting refreshed all-event choices preserve a draft's selected key, label, team, alliance, and notes", async ({
+  page,
+}) => {
+  const fixture = await setupScouting(page);
+  await fillMatch(page, "1002");
+  const loaded = page.getByLabel("Choose a loaded match");
+  await loaded.selectOption("2026test_qm4");
+  await page
+    .getByLabel("Match label", { exact: true })
+    .fill("Q4 · scout's reviewed label");
+  await page
+    .getByRole("combobox", { name: "Alliance", exact: true })
+    .selectOption("red");
+  await page
+    .getByLabel("Match notes / breakdown detail")
+    .fill("Keep this observation when the schedule refreshes.");
+  const original = fixture.feed.scoutingMatches![0];
+  fixture.feed.scoutingMatches = [
+    { ...original, label: "Q4 updated", blue: ["3001", "3002", "3003"] },
+    { ...original, key: "2026test_qm5", label: "Q5", number: 5 },
+    ...fixture.feed.matches,
+  ];
+  fixture.feed.tbaAt = Date.now();
+  await refreshScoutingMatches(page);
+  await expect(loaded.locator('option[value="2026test_qm4"]')).toHaveText(
+    "Q4 updated · Red 1001/1002/1003 vs Blue 3001/3002/3003",
+  );
+  await expect(loaded.locator('option[value="2026test_qm5"]')).toHaveCount(1);
+  await expect(page.getByLabel("Match ID", { exact: true })).toHaveValue(
+    "2026test_qm4",
+  );
+  await expect(page.getByLabel("Match label", { exact: true })).toHaveValue(
+    "Q4 · scout's reviewed label",
+  );
+  await expect(page.getByLabel("Team number", { exact: true })).toHaveValue(
+    "1002",
+  );
+  await expect(
+    page.getByRole("combobox", { name: "Alliance", exact: true }),
+  ).toHaveValue("red");
+  await expect(page.getByLabel("Match notes / breakdown detail")).toHaveValue(
+    "Keep this observation when the schedule refreshes.",
+  );
+  await page
+    .getByRole("button", { name: "Submit report", exact: true })
+    .click();
+  await expect.poll(() => fixture.state.observations.length).toBe(1);
+  expect(fixture.state.observations[0]).toMatchObject({
+    team_number: 1002,
+    match_key: "2026test_qm4",
+    data: {
+      match_label: "Q4 · scout's reviewed label",
+      alliance: "red",
+      notes: "Keep this observation when the schedule refreshes.",
+    },
+  });
+  expect(fixture.pageErrors).toEqual([]);
+});
+
+test("scouting all-event schedule does not expand operational Matches or dashboard progress beyond team 4418", async ({
+  page,
+}) => {
+  const fixture = await setupScouting(page);
+  await fillMatch(page);
+  await expect(
+    page
+      .getByLabel("Choose a loaded match")
+      .locator('option[value="2026test_qm4"]'),
+  ).toHaveCount(1);
+  await page
+    .locator(".sidebar nav")
+    .getByRole("button", { name: "Matches", exact: true })
+    .click();
+  await expect(page.locator(".competition .comp-row")).toHaveCount(2);
+  await expect(
+    page.locator(".competition .comp-row .comp-match-title strong"),
+  ).toHaveText(["Practice 1", "Q17"]);
+  await expect(
+    page.locator(".competition").getByText("Q4", { exact: true }),
+  ).toHaveCount(0);
+  await page
+    .locator(".sidebar nav")
+    .getByRole("button", { name: "Dashboard", exact: true })
+    .click();
+  await expect(page.locator(".comp-progress button strong")).toHaveText([
+    "Q17",
+  ]);
+  await expect(page.locator(".comp-dashboard")).toContainText(
+    "4418: 0 of 1 published qualification matches complete",
+  );
+  await expect(page.locator(".comp-next")).toContainText("Practice 1");
+  await expect(
+    page.locator(".comp-dashboard").getByText("Q4", { exact: true }),
+  ).toHaveCount(0);
+  expect(fixture.mutations()).toHaveLength(0);
+  expect(fixture.pageErrors).toEqual([]);
+});
+
+test("scouting older feed falls back to explicitly limited team matches while manual practices remain selectable", async ({
+  page,
+}) => {
+  const fixture = await setupScouting(page, { legacyFeed: true });
+  await fillMatch(page);
+  const loaded = page.getByLabel("Choose a loaded match");
+  await expect(loaded.locator("option")).toHaveCount(3);
+  await expect(loaded.locator('option[value="2026test_qm4"]')).toHaveCount(0);
+  await expect(page.locator(".scouting")).toContainText(
+    "Limited schedule: only the pit team’s matches are loaded, plus saved practices.",
+  );
+  await loaded.selectOption("2026test_qm17");
+  await expect(page.getByLabel("Match ID", { exact: true })).toHaveValue(
+    "2026test_qm17",
+  );
+  await loaded.selectOption("p1");
+  await expect(page.getByLabel("Match ID", { exact: true })).toHaveValue("p1");
+  await expect(page.getByLabel("Match label", { exact: true })).toHaveValue(
+    "Practice 1",
+  );
+  await page.getByLabel("Match ID", { exact: true }).fill("qm99");
+  await expect(page.getByLabel("Match ID", { exact: true })).toHaveValue(
+    "qm99",
+  );
+  // A present empty all-event list is authoritative, even if the legacy team list remains populated.
+  fixture.feed.scoutingMatches = [];
+  await refreshScoutingMatches(page);
+  await expect(loaded.locator("option")).toHaveText([
+    "Manual entry / select…",
+    "Practice 1 · Practice",
+  ]);
+  await expect(page.locator(".scouting")).toContainText(
+    "All event matches from TBA, plus saved practices.",
+  );
+  await expect(page.getByLabel("Match ID", { exact: true })).toHaveValue(
+    "qm99",
+  );
+  expect(fixture.mutations()).toHaveLength(0);
+  expect(fixture.pageErrors).toEqual([]);
+});
+
+test("scouting failed refresh preserves all-event choices and successful empty schedule clears official choices only", async ({
+  page,
+}) => {
+  const fixture = await setupScouting(page);
+  await fillMatch(page, "2001");
+  const loaded = page.getByLabel("Choose a loaded match");
+  await loaded.selectOption("2026test_qm4");
+  fixture.feed.matches = [];
+  fixture.feed.scoutingMatches = [];
+  fixture.feed.tbaError = "Synthetic TBA outage";
+  fixture.feed.tbaAt = null;
+  await refreshScoutingMatches(page);
+  await expect(loaded.locator('option[value="2026test_qm4"]')).toHaveCount(1);
+  await expect(loaded.locator('option[value="2026test_qm17"]')).toHaveCount(1);
+  await expect(page.locator(".scouting")).toContainText(
+    "Last loaded schedule may be stale.",
+  );
+  fixture.feed.tbaError = null;
+  fixture.feed.tbaAt = Date.now();
+  await refreshScoutingMatches(page);
+  await expect(loaded.locator("option")).toHaveText([
+    "Manual entry / select…",
+    "Practice 1 · Practice",
+  ]);
+  await expect(page.locator(".scouting")).toContainText(
+    "All event matches from TBA, plus saved practices.",
+  );
+  await expect(page.locator(".scouting")).not.toContainText(
+    "Last loaded schedule may be stale.",
+  );
+  await expect(page.getByLabel("Match ID", { exact: true })).toHaveValue(
+    "2026test_qm4",
+  );
+  await expect(page.getByLabel("Match label", { exact: true })).toHaveValue(
+    "Q4",
+  );
+  await loaded.selectOption("p1");
+  await expect(page.getByLabel("Match label", { exact: true })).toHaveValue(
+    "Practice 1",
+  );
+  expect(fixture.mutations()).toHaveLength(0);
+  expect(fixture.pageErrors).toEqual([]);
+});
+
+test("scouting event switch never offers the previous event's official matches or practices while the new feed loads", async ({
+  page,
+}) => {
+  const fixture = await setupScouting(page);
+  await fillMatch(page, "2002");
+  await page.getByLabel("Choose a loaded match").selectOption("2026test_qm4");
+  const nextMatch = {
+    ...fixture.feed.scoutingMatches![0],
+    key: "2026previous_qm3",
+    label: "Q3",
+    number: 3,
+  };
+  fixture.data.pit_events[0].status = "completed";
+  fixture.data.pit_events[1].status = "active";
+  fixture.competition.config = {
+    ...fixture.competition.config,
+    event_id: historicalEventId,
+    tba_event_key: "2026previous",
+    version: 2,
+  };
+  fixture.competition.matches = [
+    {
+      ...fixture.competition.matches[0],
+      id: "40000000-0000-4000-8000-000000000002",
+      event_id: historicalEventId,
+      match_key: "p2",
+      manual_label: "Practice 2",
+    },
+  ];
+  Object.assign(fixture.feed, {
+    eventId: historicalEventId,
+    eventKey: "2026previous",
+    eventName: "Synthetic Previous Event",
+    configVersion: 2,
+    matches: [],
+    scoutingMatches: [nextMatch],
+  });
+  const held = fixture.holdNext("feed");
+  await page.getByRole("button", { name: "Refresh data", exact: true }).click();
+  await held.started;
+  await page.getByLabel("Scouting event").selectOption(historicalEventId);
+  await fillMatch(page, "1001", "qm3");
+  const loaded = page.getByLabel("Choose a loaded match");
+  await expect(
+    loaded.locator(
+      'option[value="2026test_qm4"], option[value="2026test_qm17"], option[value="p1"]',
+    ),
+  ).toHaveCount(0);
+  await held.release();
+  await expect(loaded.locator("option")).toHaveText([
+    "Manual entry / select…",
+    "Q3 · Red 1001/1002/1003 vs Blue 2001/2002/2003",
+    "Practice 2 · Practice",
+  ]);
+  await loaded.selectOption("2026previous_qm3");
+  await expect(page.getByLabel("Match ID", { exact: true })).toHaveValue(
+    "2026previous_qm3",
+  );
+  await page.getByLabel("Scouting event").selectOption(eventId);
+  await expect(
+    page.getByRole("button", { name: "Resume", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "New match report", exact: true }),
+  ).toBeDisabled();
+  await expect(page.getByLabel("Choose a loaded match")).toHaveCount(0);
+  expect(fixture.mutations()).toHaveLength(0);
+  expect(fixture.pageErrors).toEqual([]);
+});
 
 test("scouting match and pit capture preserve observed zero, unknowns, schedule choices, and cloud-first submission", async ({
   page,
@@ -37,7 +918,7 @@ test("scouting match and pit capture preserve observed zero, unknowns, schedule 
   await page
     .locator(".scout-counter")
     .filter({ hasText: "AUTO fuel" })
-    .getByRole("button", { name: "Observed zero", exact: true })
+    .getByRole("button", { name: "Set 0 fuel", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Increase TELEOP fuel", exact: true })
@@ -180,7 +1061,7 @@ test("scouting loaded tab captures offline, queues locally, and reconnect upload
   ).toBeDisabled();
   await scoutTab(page, "Teams");
   await expect(
-    page.getByRole("heading", { name: "No synced observations yet" }),
+    page.getByRole("heading", { name: "No event teams loaded yet" }),
   ).toBeVisible();
   await captureScouting(page, test.info(), "offline-data");
   await context.setOffline(false);
