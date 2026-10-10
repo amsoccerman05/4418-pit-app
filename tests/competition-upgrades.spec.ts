@@ -137,6 +137,12 @@ test("readiness cannot be ready before installation and clears after the final p
   page,
 }) => {
   const { context, data, feed } = await setup(page);
+  context.templates.push({
+    ...context.templates[0],
+    id: "post-template",
+    name: "Post inspection",
+    kind: "post",
+  });
   context.matches = [
     { id: "ops", match_key: "2026test_qm17", battery_id: "battery" },
   ];

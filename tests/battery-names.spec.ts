@@ -487,7 +487,7 @@ test("archived match assignments stay selected until the crew explicitly changes
   await expect(selection).toHaveValue(batteryIds[6]);
   await expect(selection.locator("option:checked")).toContainText("B07");
   await page
-    .getByLabel("Operational note", { exact: true })
+    .getByRole("textbox", { name: "Operational note", exact: true })
     .fill("An explicit battery change is needed");
   const writesBefore = calls.length;
   await page
