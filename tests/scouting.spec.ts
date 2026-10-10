@@ -343,7 +343,9 @@ test("scouting form explains contextual unknowns, rating anchors, zero fuel, and
       .locator('option[value=""]'),
   ).toHaveText("Choose station (if known)");
   await expect(
-    page.getByLabel("Driver ability · 1–5", { exact: true }).locator("option"),
+    page
+      .getByRole("combobox", { name: "Driver ability · 1–5", exact: true })
+      .locator("option"),
   ).toHaveText([
     "Not rated",
     "1 · Struggled with control",
@@ -354,7 +356,10 @@ test("scouting form explains contextual unknowns, rating anchors, zero fuel, and
   ]);
   await expect(
     page
-      .getByLabel("Defense effectiveness · 1–5", { exact: true })
+      .getByRole("combobox", {
+        name: "Defense effectiveness · 1–5",
+        exact: true,
+      })
       .locator("option"),
   ).toHaveText([
     "Not rated",
@@ -365,12 +370,15 @@ test("scouting form explains contextual unknowns, rating anchors, zero fuel, and
     "5 · Very effective defense",
   ]);
   await expect(
-    page.getByLabel("Driver ability · 1–5", { exact: true }),
+    page.getByRole("combobox", { name: "Driver ability · 1–5", exact: true }),
   ).toHaveAccessibleDescription(
     "Rate only if you saw enough driving. Unrated is excluded from the average.",
   );
   await expect(
-    page.getByLabel("Defense effectiveness · 1–5", { exact: true }),
+    page.getByRole("combobox", {
+      name: "Defense effectiveness · 1–5",
+      exact: true,
+    }),
   ).toHaveAccessibleDescription(
     "Leave unrated if it did not play defense or you could not judge its impact.",
   );
@@ -397,7 +405,7 @@ test("scouting form explains contextual unknowns, rating anchors, zero fuel, and
   }
   await expect(
     page
-      .getByLabel("Endgame climb", { exact: true })
+      .getByRole("combobox", { name: "Endgame climb", exact: true })
       .locator('option[value="L3"]'),
   ).toHaveText("Reached Level 3");
   await captureScouting(page, test.info(), "clear-match-labels");
@@ -438,19 +446,19 @@ test("scouting clearer labels preserve null versus zero and climb codes through 
     .click();
   await expect(page.getByLabel("TELEOP fuel", { exact: true })).toHaveValue("");
   await page
-    .getByLabel("Driver ability · 1–5", { exact: true })
+    .getByRole("combobox", { name: "Driver ability · 1–5", exact: true })
     .selectOption({ label: "1 · Struggled with control" });
   await page
-    .getByLabel("Defense effectiveness · 1–5", { exact: true })
+    .getByRole("combobox", { name: "Defense effectiveness · 1–5", exact: true })
     .selectOption({ label: "5 · Very effective defense" });
   await page
-    .getByLabel("Defense effectiveness · 1–5", { exact: true })
+    .getByRole("combobox", { name: "Defense effectiveness · 1–5", exact: true })
     .selectOption({ label: "Not rated" });
   await page
-    .getByLabel("AUTO climb", { exact: true })
+    .getByRole("combobox", { name: "AUTO climb", exact: true })
     .selectOption({ label: "Did not attempt a climb" });
   await page
-    .getByLabel("Endgame climb", { exact: true })
+    .getByRole("combobox", { name: "Endgame climb", exact: true })
     .selectOption({ label: "Attempted, but failed" });
   await page.getByRole("button", { name: "Close draft", exact: true }).click();
   await page.reload();
@@ -459,17 +467,20 @@ test("scouting clearer labels preserve null versus zero and climb codes through 
   await expect(page.getByLabel("AUTO fuel", { exact: true })).toHaveValue("0");
   await expect(page.getByLabel("TELEOP fuel", { exact: true })).toHaveValue("");
   await expect(
-    page.getByLabel("Driver ability · 1–5", { exact: true }),
+    page.getByRole("combobox", { name: "Driver ability · 1–5", exact: true }),
   ).toHaveValue("1");
   await expect(
-    page.getByLabel("Defense effectiveness · 1–5", { exact: true }),
+    page.getByRole("combobox", {
+      name: "Defense effectiveness · 1–5",
+      exact: true,
+    }),
   ).toHaveValue("");
-  await expect(page.getByLabel("AUTO climb", { exact: true })).toHaveValue(
-    "not_attempted",
-  );
-  await expect(page.getByLabel("Endgame climb", { exact: true })).toHaveValue(
-    "failed",
-  );
+  await expect(
+    page.getByRole("combobox", { name: "AUTO climb", exact: true }),
+  ).toHaveValue("not_attempted");
+  await expect(
+    page.getByRole("combobox", { name: "Endgame climb", exact: true }),
+  ).toHaveValue("failed");
   await page
     .getByRole("button", { name: "Submit report", exact: true })
     .click();
@@ -505,16 +516,16 @@ test("scouting clearer labels preserve null versus zero and climb codes through 
     .click();
   await teleop.getByRole("button", { name: "Set 0 fuel", exact: true }).click();
   await page
-    .getByLabel("Driver ability · 1–5", { exact: true })
+    .getByRole("combobox", { name: "Driver ability · 1–5", exact: true })
     .selectOption({ label: "Not rated" });
   await page
-    .getByLabel("Defense effectiveness · 1–5", { exact: true })
+    .getByRole("combobox", { name: "Defense effectiveness · 1–5", exact: true })
     .selectOption({ label: "5 · Very effective defense" });
   await page
-    .getByLabel("AUTO climb", { exact: true })
+    .getByRole("combobox", { name: "AUTO climb", exact: true })
     .selectOption({ label: "Attempted, but failed" });
   await page
-    .getByLabel("Endgame climb", { exact: true })
+    .getByRole("combobox", { name: "Endgame climb", exact: true })
     .selectOption({ label: "Did not attempt a climb" });
   await page
     .getByRole("button", { name: "Submit report", exact: true })
