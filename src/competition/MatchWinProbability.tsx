@@ -1,7 +1,10 @@
 import type { Feed } from "./service";
 import { isManualMatch, type OperationalMatch } from "./manual";
 import { isStale } from "./feed-state";
-import { matchProbability, probabilityPercent } from "./match-probability";
+import {
+  selectMatchProbability,
+  probabilityPercent,
+} from "./match-probability";
 import "./match-probability.css";
 
 export function MatchWinProbability({
@@ -19,14 +22,23 @@ export function MatchWinProbability({
 }) {
   const manual = isManualMatch(match);
   const sameEvent = !!eventKey && feed?.eventKey === eventKey;
-  const checked = sameEvent ? feed?.predictionsAt : null;
-  const probability = matchProbability(feed, match, eventKey, now, unavailable);
+  const probability = selectMatchProbability(
+    feed,
+    match,
+    eventKey,
+    now,
+    unavailable,
+  );
+  const checked =
+    probability?.fetchedAt ?? (sameEvent ? feed?.predictionsAt : null);
+  const backup = probability?.provider === "Match13";
   const stale =
-    unavailable || !!feed?.predictionsError || isStale(checked, now);
+    !probability &&
+    (unavailable || !!feed?.predictionsError || isStale(checked, now));
   return (
     <section
       className="comp-win-probability"
-      aria-label="Statbotics match probability"
+      aria-label="Match win probability"
     >
       <h3>Estimated win chance · {match.label}</h3>
       {probability && !manual ? (
@@ -45,27 +57,32 @@ export function MatchWinProbability({
       ) : (
         <p className="comp-win-unavailable">
           {manual
-            ? "Statbotics predictions aren’t available for manual practice matches."
+            ? "Predictions aren’t available for manual practice matches."
             : stale
-              ? "Prediction unavailable. Waiting for current Statbotics data and match schedule."
-              : "No Statbotics prediction for this match and lineup yet."}
+              ? "Prediction unavailable. Waiting for current prediction data and match schedule."
+              : "No prediction for this match and lineup yet."}
         </p>
       )}
       <small>
         <a
-          href="https://www.statbotics.io/"
+          href={
+            backup ? "https://www.match13.com/" : "https://www.statbotics.io/"
+          }
           target="_blank"
           rel="noopener noreferrer"
         >
-          Statbotics
+          {backup ? "Match13 backup" : "Statbotics"}
         </a>
         {!manual && checked
-          ? ` · Last checked ${new Date(checked).toLocaleString()}${stale ? " · Stale or unavailable" : ""}`
+          ? ` · Fetched ${new Date(checked).toLocaleString()}${stale ? " · Stale or unavailable" : ""}`
           : ""}
       </small>
       {probability && (
         <small className="comp-win-note">
           Pre-match model estimate, not a guarantee. No separate tie estimate.
+          {backup
+            ? " Red/blue from the matching TBA lineup; Match13’s alliance colors cannot be independently verified."
+            : ""}
         </small>
       )}
     </section>

@@ -18,7 +18,7 @@ async function predictionFixture(page: Parameters<typeof setup>[0]) {
   feed.predictionsError = null;
   await page.reload();
   const card = page.getByRole("region", {
-    name: "Statbotics match probability",
+    name: "Match win probability",
   });
   await expect(card).toBeVisible();
   return { ...fixture, card };
@@ -36,7 +36,7 @@ test("upcoming dashboard probability shows exact red/blue lineups, provider, pre
   await expect(card.locator(".comp-win-red")).toContainText(
     "4418 · 1619 · 1339",
   );
-  await expect(card).toContainText("Last checked");
+  await expect(card).toContainText("Fetched");
   await expect(card).toContainText(
     "Pre-match model estimate, not a guarantee. No separate tie estimate.",
   );
@@ -74,7 +74,7 @@ test("missing, stale, failed and changed-lineup predictions never fabricate perc
     feed.matchPredictions[0].redWinProbability = p;
     await page.reload();
     await expect(card).toContainText(
-      "No Statbotics prediction for this match and lineup yet.",
+      "No prediction for this match and lineup yet.",
     );
     await expect(card.locator(".comp-win-alliances")).toHaveCount(0);
   }
@@ -99,7 +99,7 @@ test("missing, stale, failed and changed-lineup predictions never fabricate perc
   feed.matchPredictions[0].red = ["4418", "1619", "1"];
   await page.reload();
   await expect(card).toContainText(
-    "No Statbotics prediction for this match and lineup yet.",
+    "No prediction for this match and lineup yet.",
   );
   await expect(card.locator(".comp-win-alliances")).toHaveCount(0);
 });
@@ -129,4 +129,53 @@ test("manual practice and the next official match cannot inherit a different mat
     page.getByRole("heading", { name: "No upcoming match published" }),
   ).toBeVisible();
   await expect(card).toHaveCount(0);
+});
+
+test("Match13 backup is clearly labeled, preserves the matching TBA lineups, and yields to Statbotics recovery", async ({
+  page,
+}) => {
+  const { feed, card, calls } = await predictionFixture(page);
+  feed.predictionsError = "Statbotics unavailable";
+  feed.match13Predictions = [
+    {
+      ...feed.matchPredictions[0],
+      redWinProbability: 0.62,
+      rosterVerification: "tba-six-team-set",
+    },
+  ];
+  feed.match13At = Date.now();
+  feed.match13Error = null;
+  await page.reload();
+  await expect(
+    card.getByRole("link", { name: "Match13 backup" }),
+  ).toHaveAttribute("href", "https://www.match13.com/");
+  await expect(card.locator(".comp-win-red strong")).toHaveText("62.0%");
+  await expect(card.locator(".comp-win-blue strong")).toHaveText("38.0%");
+  await expect(card).toContainText("Fetched");
+  await expect(card).toContainText(
+    "Match13’s alliance colors cannot be independently verified.",
+  );
+  await expect(card).not.toContainText("Stale or unavailable");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  feed.predictionsError = null;
+  await page.reload();
+  await expect(card.getByRole("link", { name: "Statbotics" })).toBeVisible();
+  await expect(card.locator(".comp-win-red strong")).toHaveText("73.5%");
+  feed.predictionsError = "down";
+  feed.match13Error = "down";
+  await page.reload();
+  await expect(card.locator(".comp-win-alliances")).toHaveCount(0);
+  feed.match13Error = null;
+  feed.match13At = Date.now() - 600000;
+  await page.reload();
+  await expect(card.locator(".comp-win-alliances")).toHaveCount(0);
+  feed.match13At = Date.now();
+  feed.match13Predictions[0].red = ["4418", "1619", "1"];
+  await page.reload();
+  await expect(card.locator(".comp-win-alliances")).toHaveCount(0);
+  expect(calls).toEqual([]);
 });

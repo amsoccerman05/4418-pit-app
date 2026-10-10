@@ -1,6 +1,6 @@
 # Dashboard match probabilities
 
-The next-match card displays Statbotics's pre-match win estimate for the exact upcoming official match and red/blue team lineup. It remains informational and never changes robot readiness, checklists, scouting, batteries, or production records.
+The next-match card prefers Statbotics's pre-match win estimate for the exact upcoming official match and red/blue team lineup. It remains informational and never changes robot readiness, checklists, scouting, batteries, or production records.
 
 ## Provider contract
 
@@ -14,9 +14,9 @@ The next-match card displays Statbotics's pre-match win estimate for the exact u
 
 Event, canonical qualification/playoff match key, and both alliance rosters must agree. Manual practices, completed/in-progress matches, absent predictions, changed lineups, and missing or mismatched events do not get a percentage. Zero and one are valid values; null or missing values are unavailable. Non-numbers, non-finite values, out-of-range values, duplicate identities, invalid alliances and full potentially truncated pages are rejected.
 
-A successful empty/unpublished response clears older data. An outage preserves the last validated snapshot with its original check time for diagnostics, only inside the same event. Client fallback additionally requires the same event ID, team, and config version. The UI suppresses percentages when the schedule or provider is unavailable, offline, older than five minutes, or has an implausible future timestamp. “Last checked” is our successful fetch time, not the model's generation time.
+A successful empty/unpublished response clears older data. An outage preserves the last validated snapshot with its original check time for diagnostics, only inside the same event. Client fallback additionally requires the same event ID, team, and config version. The UI suppresses percentages when the schedule or provider is unavailable, offline, older than five minutes, or has an implausible future timestamp. “Fetched” is our successful fetch time, not the model's generation time.
 
-No new API credentials or migrations are required. Deploy the updated competition-feed function alongside the dashboard. An older feed deployment safely displays unavailable. Live Statbotics endpoints returned upstream 500/503 during implementation; local tests use clearly synthetic fixtures against the verified schema. No live KCMT probability was verified or fabricated.
+The optional [Match13 fallback](MATCH13-FALLBACK.md) uses a server-only key and a service-only shared public-data cache. Statbotics remains primary and event EPA remains Statbotics-only. Missing or unavailable providers safely display no percentages. “Fetched” is our retrieval/revalidation time, never an unpublished model-generation timestamp.
 
 ## Verification
 

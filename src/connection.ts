@@ -28,6 +28,7 @@ export function accessFailure(error: unknown): boolean {
 export async function boundedRequest<T>(
   operation: (signal: AbortSignal) => PromiseLike<T>,
   signal?: AbortSignal,
+  timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<T> {
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -42,7 +43,7 @@ export async function boundedRequest<T>(
     timeout = setTimeout(() => {
       controller.abort();
       reject(new Error("Connection timed out. Showing last loaded data."));
-    }, REQUEST_TIMEOUT_MS);
+    }, timeoutMs);
   });
   try {
     if (controller.signal.aborted) return await failure;

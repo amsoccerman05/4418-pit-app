@@ -5,6 +5,8 @@ import ts from 'typescript';
 import {parseEventMatches,parseEventTeams,parseMatches,parseNexus} from '../supabase/functions/competition-feed/external.ts';
 import {createStandingsFeed} from '../supabase/functions/competition-feed/standings.ts';
 import {createDisplayFeed} from '../supabase/functions/competition-feed/display-feed.ts';
+import {createMatch13Feed,createMatch13Store} from '../supabase/functions/competition-feed/match13-cache.ts';
+import {bindMatch13,currentTime,hasPrimaryPrediction,trustedUpcoming} from '../supabase/functions/competition-feed/match13.ts';
 
 const secret='test-server-secret';
 const status={qual:{num_teams:40,ranking:{team_key:'frc4418',rank:7,record:{wins:5,losses:2,ties:1}}},playoff:{record:{wins:4,losses:0,ties:0}},overall_status_str:'Do not expose upstream HTML'};
@@ -12,19 +14,19 @@ const rawMatch=(number,red,blue)=>({key:`2026test_qm${number}`,event_key:'2026te
 // Execute the actual handler with injected server dependencies; never contact production.
 function fixture(){
  let handler;
- const state={user:{id:'member'},authError:null,active:true,event:{id:'event'},config:{team_number:4418,tba_event_key:'2026test',nexus_event_key:'test',version:1},configError:null,status,standingsError:null,matches:[],matchError:null,matchAt:1800000000000,teams:[],teamsError:null,teamsAt:1800000010000,at:1800000000000,requests:[]};
+ const state={user:{id:'member'},authError:null,active:true,event:{id:'event'},config:{team_number:4418,tba_event_key:'2026test',nexus_event_key:'test',version:1},configError:null,status,standingsError:null,matches:[],matchError:null,matchAt:1800000000000,teams:[],teamsError:null,teamsAt:1800000010000,at:1800000000000,requests:[],backupCalls:[],backupData:[],backupError:null,predictions:[],predictionsError:null,clients:[]};
  const source=readFileSync(new URL('../supabase/functions/competition-feed/index.ts',import.meta.url),'utf8');
  const code=ts.transpileModule(source.replace(/import .*?;\n/g,''),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
  const db={auth:{getUser:async()=>({data:{user:state.user},error:state.authError})},from(table){const q={select(){return q},eq(){return q},single:async()=>({data:{active:state.active}}),maybeSingle:async()=>({data:table==='pit_events'?state.event:state.config,error:table==='pit_event_config'?state.configError:null})};return q;}};
  const cache=async(url,header,key,ttl)=>{
   state.requests.push({url,header,key,ttl});
-  if(url.startsWith('https://api.statbotics.io/')) {assert.equal(key,undefined);assert.equal(header,null);return {data:[],at:state.at,error:null};}
+  if(url.startsWith('https://api.statbotics.io/')) {assert.equal(key,undefined);assert.equal(header,null);return {data:url.includes('/v3/matches?')?state.predictions:[],at:state.at,error:url.includes('/v3/matches?')?state.predictionsError:null};}
   assert.equal(key,secret);
   if(url.endsWith('/map'))return {data:null,at:state.at,error:null,notFound:true};
   if(url.endsWith('/pits'))return {data:{},at:state.at,error:null};
   return {data:url.endsWith('/status')?state.status:url.includes('/matches/')?state.matches:url.includes('/teams/')?state.teams:url.includes('frc.nexus')?{eventKey:'test',dataAsOfTime:state.nexusAsOf??state.at,matches:[],announcements:[],partsRequests:[]}:{key:state.config.tba_event_key,name:'Test event',webcasts:[]},at:url.includes('/matches/')?state.matchAt:url.includes('/teams/')?state.teamsAt:state.at,error:url.endsWith('/status')?state.standingsError:url.includes('/matches/')?state.matchError:url.includes('/teams/')?state.teamsError:null};
  };
- new Function('Deno','createClient','createCache','parseEventMatches','parseEventTeams','parseNexus','createStandingsFeed','createDisplayFeed',code)({env:{get:()=>secret},serve:h=>handler=h},()=>db,()=>cache,parseEventMatches,parseEventTeams,parseNexus,createStandingsFeed,createDisplayFeed);
+ new Function('Deno','createClient','createCache','parseEventMatches','parseEventTeams','parseNexus','createStandingsFeed','createDisplayFeed','createMatch13Feed','createMatch13Store','bindMatch13','currentTime','hasPrimaryPrediction','trustedUpcoming',code)({env:{get:()=>secret},serve:h=>handler=h},(url,key)=>{state.clients.push(key);return db;},()=>cache,parseEventMatches,parseEventTeams,parseNexus,createStandingsFeed,createDisplayFeed,()=>async(event,key)=>{state.backupCalls.push({event,key});return {data:state.backupData,at:state.at,error:state.backupError};},createMatch13Store,bindMatch13,currentTime,hasPrimaryPrediction,trustedUpcoming);
  return {state,request:(headers={authorization:'Bearer test'},method='POST')=>handler(new Request('https://example.test/feed',{method,headers}))};
 }
 
@@ -154,4 +156,21 @@ test('queue normalization rejects regressing or future source times and recovers
  let feed=await (await request()).json();assert.deepEqual(feed.nexus,first.nexus);assert.equal(feed.nexusAt,first.nexusAt);assert.ok(feed.nexusError);
  state.nexusAsOf=state.at+60001;feed=await (await request()).json();assert.deepEqual(feed.nexus,first.nexus);assert.ok(feed.nexusError);
  state.nexusAsOf=state.at;feed=await (await request()).json();assert.equal(feed.nexus.asOf,state.at);assert.equal(feed.nexusError,null);
+});
+
+
+test('authenticated feed falls back only with a trusted current official schedule and recovers to primary without touching EPA',async()=>{
+ const {state,request}=fixture();state.at=Date.now();state.matchAt=state.at;
+ state.matches=[rawMatch(1,[4418,2,3],[4,5,6])];
+ state.backupData=[{event:'2026test',key:'2026test_qm1',teams:['4418','2','3','4','5','6'],redWinProbability:.7}];
+ state.predictionsError='Statbotics unavailable';
+ const first=await (await request()).json();assert.equal(first.match13Predictions[0].redWinProbability,.7);assert.equal(first.match13At,state.at);assert.equal(first.predictionsError.startsWith('Statbotics'),true);assert.equal(first.epaError,null);assert.equal(state.backupCalls.length,1);assert.equal(state.clients.length,2);
+ assert.ok(!JSON.stringify(first).includes(secret));
+ state.predictionsError=null;state.predictions=[{event:'2026test',key:'2026test_qm1',alliances:{red:{team_keys:[4418,2,3]},blue:{team_keys:[4,5,6]}},pred:{red_win_prob:.6}}];
+ const recovered=await (await request()).json();assert.equal(recovered.matchPredictions[0].redWinProbability,.6);assert.deepEqual(recovered.match13Predictions,[]);assert.equal(state.backupCalls.length,1);
+ state.predictions[0].pred.red_win_prob=null;await request();assert.equal(state.backupCalls.length,2);
+ state.predictions=[];state.matchError='TBA unavailable';const failed=await (await request()).json();assert.deepEqual(failed.match13Predictions,[]);assert.equal(state.backupCalls.length,2);
+ state.matchError=null;state.matchAt=state.at-300001;await request();assert.equal(state.backupCalls.length,2);
+ state.matchAt=state.at;state.matches=[rawMatch(1,[4418,2,3],[4418,5,6])];await request();assert.equal(state.backupCalls.length,2);
+ state.matches=[];await request();assert.equal(state.backupCalls.length,2);
 });
