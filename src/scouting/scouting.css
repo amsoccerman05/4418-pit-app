@@ -41,6 +41,7 @@
   flex-wrap: wrap;
 }
 .scout-tabs {
+  flex-direction: row;
   padding: 6px;
   border: 1px solid var(--suite-border);
   border-radius: 10px;

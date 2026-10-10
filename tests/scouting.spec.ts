@@ -563,6 +563,17 @@ test("scouting main navigation remains usable and all panels avoid horizontal vi
   await setupScouting(page, {
     observations: [observation(1, 1619), observation(2, 1339)],
   });
+  if (page.viewportSize()!.width > 760) {
+    const tabRows = await page
+      .locator(".scout-tabs button")
+      .evaluateAll((buttons) =>
+        buttons.map((button) => Math.round(button.getBoundingClientRect().top)),
+      );
+    expect(
+      new Set(tabRows).size,
+      "Desktop scouting sections must use one horizontal tab row",
+    ).toBe(1);
+  }
   const navButtons = page.locator(".sidebar nav button");
   for (const button of await navButtons.all()) {
     await expect(button).toBeVisible();
