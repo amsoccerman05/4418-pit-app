@@ -1249,7 +1249,9 @@ test("scouting shared picklist supports reviewed edit and conflict, assignment t
     .click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   await scoutTab(page, "Assignments");
-  await page.getByLabel("Driver station", { exact: true }).selectOption("red2");
+  await page
+    .getByRole("combobox", { name: "Driver station", exact: true })
+    .selectOption("red2");
   await page
     .getByRole("combobox", { name: "Scout", exact: true })
     .selectOption(otherActorId);
@@ -1494,7 +1496,9 @@ test("scouting student with server-verified leadership can manage shared picks a
     .click();
   await expect(page.locator(".scout-picks")).toContainText("#1 · Team 4418");
   await scoutTab(page, "Assignments");
-  await page.getByLabel("Driver station", { exact: true }).selectOption("red1");
+  await page
+    .getByRole("combobox", { name: "Driver station", exact: true })
+    .selectOption("red1");
   await page
     .getByRole("combobox", { name: "Scout", exact: true })
     .selectOption(otherActorId);

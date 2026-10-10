@@ -29,7 +29,10 @@ test("station assignment creation, six labels, duplicate slot, repeat scout warn
 }) => {
   const f = await setupScouting(page);
   await scoutTab(page, "Assignments");
-  const picker = page.getByLabel("Driver station", { exact: true });
+  const picker = page.getByRole("combobox", {
+    name: "Driver station",
+    exact: true,
+  });
   await expect(picker.locator("option")).toHaveText([
     "Choose a station",
     "Red 1",
@@ -42,7 +45,9 @@ test("station assignment creation, six labels, duplicate slot, repeat scout warn
   await expect(page.getByLabel("Assigned match ID")).toHaveCount(0);
   await expect(page.getByLabel("Assigned team")).toHaveCount(0);
   await picker.selectOption("red2");
-  await page.getByLabel("Scout", { exact: true }).selectOption(actorId);
+  await page
+    .getByRole("combobox", { name: "Scout", exact: true })
+    .selectOption(actorId);
   await page.getByRole("button", { name: "Assign scout", exact: true }).click();
   await expect(page.locator(".scout-record")).toContainText(
     "Red 2 · All matches",
@@ -56,7 +61,9 @@ test("station assignment creation, six labels, duplicate slot, repeat scout warn
   });
   await expect(picker.locator("option[value=red2]")).toBeDisabled();
   await picker.selectOption("blue1");
-  await page.getByLabel("Scout", { exact: true }).selectOption(actorId);
+  await page
+    .getByRole("combobox", { name: "Scout", exact: true })
+    .selectOption(actorId);
   await expect(
     page.locator(".scout-caveat").filter({ hasText: "already covers" }),
   ).toContainText("Red 2");
@@ -64,7 +71,9 @@ test("station assignment creation, six labels, duplicate slot, repeat scout warn
     .getByRole("button", { name: "Edit assignment", exact: true })
     .click();
   await expect(picker).toBeDisabled();
-  await page.getByLabel("Scout", { exact: true }).selectOption(otherActorId);
+  await page
+    .getByRole("combobox", { name: "Scout", exact: true })
+    .selectOption(otherActorId);
   await page
     .getByRole("button", { name: "Update assignment", exact: true })
     .click();
@@ -98,13 +107,14 @@ test("assigned station follows each selected match, survives draft reload, clear
     number: 19,
     red: ["7001", "7002", "7003"],
   });
-  await page
-    .getByRole("button", { name: "Refresh scouting", exact: true })
-    .click();
   await scoutTab(page, "Assignments");
   await page.getByRole("button", { name: "Scout Red 2", exact: true }).click();
-  await expect(page.getByLabel("Alliance", { exact: true })).toHaveValue("red");
-  await expect(page.getByLabel("Station", { exact: true })).toHaveValue("2");
+  await expect(
+    page.getByRole("combobox", { name: "Alliance", exact: true }),
+  ).toHaveValue("red");
+  await expect(
+    page.getByRole("combobox", { name: "Station", exact: true }),
+  ).toHaveValue("2");
   await page.getByLabel("Choose a loaded match").selectOption("2026test_qm17");
   await expect(page.getByLabel("Team number", { exact: true })).toHaveValue(
     "1619",
@@ -118,7 +128,9 @@ test("assigned station follows each selected match, survives draft reload, clear
   await expect(page.getByLabel("Team number", { exact: true })).toHaveValue(
     "1619",
   );
-  await expect(page.getByLabel("Station", { exact: true })).toHaveValue("2");
+  await expect(
+    page.getByRole("combobox", { name: "Station", exact: true }),
+  ).toHaveValue("2");
   await page.getByLabel("Choose a loaded match").selectOption("2026test_qm19");
   await expect(page.getByLabel("Team number", { exact: true })).toHaveValue(
     "7002",
@@ -211,7 +223,9 @@ test("legacy match and pit assignments remain readable and editable without conv
     .first()
     .click();
   await expect(page.getByLabel("Earlier assigned match ID")).toHaveValue("qm1");
-  await page.getByLabel("Scout", { exact: true }).selectOption(otherActorId);
+  await page
+    .getByRole("combobox", { name: "Scout", exact: true })
+    .selectOption(otherActorId);
   await page
     .getByRole("button", { name: "Update assignment", exact: true })
     .click();
@@ -220,9 +234,13 @@ test("legacy match and pit assignments remain readable and editable without conv
     match_key: "qm1",
     assignee_id: otherActorId,
   });
-  await page.getByLabel("Report type", { exact: true }).selectOption("pit");
+  await page
+    .getByRole("combobox", { name: "Report type", exact: true })
+    .selectOption("pit");
   await page.getByLabel("Assigned team").fill("7001");
-  await page.getByLabel("Scout", { exact: true }).selectOption(actorId);
+  await page
+    .getByRole("combobox", { name: "Scout", exact: true })
+    .selectOption(actorId);
   await page.getByRole("button", { name: "Assign scout", exact: true }).click();
   await expect(page.locator(".scout-record").last()).toContainText(
     "Team 7001 · Pit",
@@ -241,8 +259,12 @@ test("unassigned manual report retains an explicit team when recording its first
     .click();
   await page.getByLabel("Match ID", { exact: true }).fill("p9");
   await page.getByLabel("Team number", { exact: true }).fill("7001");
-  await page.getByLabel("Alliance", { exact: true }).selectOption("blue");
-  await page.getByLabel("Station", { exact: true }).selectOption("1");
+  await page
+    .getByRole("combobox", { name: "Alliance", exact: true })
+    .selectOption("blue");
+  await page
+    .getByRole("combobox", { name: "Station", exact: true })
+    .selectOption("1");
   await expect(page.getByLabel("Team number", { exact: true })).toHaveValue(
     "7001",
   );
