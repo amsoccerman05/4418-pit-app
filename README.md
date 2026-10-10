@@ -2,6 +2,10 @@
 
 A mobile-first competition pit workspace for FRC Team 4418 IMPULSE. This is a separate application from Team 4418 Inventory. It uses the same Supabase Auth users and existing `public.profiles`; it never creates a second user/role system.
 
+## Live pit display
+
+Pit display includes a sticky queue/readiness strip, bumper color, optional event video, Nexus announcements/parts requests and pit maps, plus Statbotics event EPA. Scouting Compare can load all six teams in the next match. See [source limits, privacy, and verification](docs/LIVE-PIT-DISPLAY.md).
+
 ## Competition scouting
 
 **Scouting** adds independent 2026 REBUILT match/pit capture, durable device drafts and automatic cloud submission with a durable reconnect queue, team summaries/comparison, assignment coverage and a shared leadership picklist. Read the [scouting quick start, access model and offline limitations](docs/SCOUTING.md). Apply the additive scouting migration before deploying this feature. This is an independently implemented workflow, not an exact Lovat clone or an offline cold-start app.

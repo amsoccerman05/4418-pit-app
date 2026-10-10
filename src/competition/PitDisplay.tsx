@@ -6,6 +6,12 @@ import { isStale } from "./feed-state";
 import type { Readiness } from "./readiness";
 import { isManualMatch } from "./manual";
 import { EventStandings } from "./Standings";
+import { EventStream } from "./EventStream";
+import { EventBoard } from "./EventBoard";
+import { QueueRibbon } from "./QueueRibbon";
+import { StatboticsComparison } from "./StatboticsComparison";
+import { measuredEventDelay } from "./live-display";
+import "./live-display.css";
 const at = (n: number | null | undefined) =>
   n ? new Date(n).toLocaleString() : "Not loaded";
 export function PitDisplay({
@@ -48,6 +54,10 @@ export function PitDisplay({
     !!c.feedError ||
     !!c.feed?.tbaError ||
     isStale(c.feed?.tbaAt, c.tick);
+  const delay = measuredEventDelay(
+    c.feed?.scoutingMatches || c.feed?.matches || [],
+  );
+  const externalStale = c.online === false || !!c.feedError || !!c.error;
   return (
     <dialog
       ref={dialog}
@@ -94,6 +104,13 @@ export function PitDisplay({
           Retry schedule / checklists
         </button>
       </div>
+      <QueueRibbon
+        c={c}
+        next={next}
+        status={state.status}
+        stale={localStale}
+        scheduleStale={scheduleStale}
+      />
       <div className="comp-display-grid">
         <section className="card comp-display-next">
           <small>NEXT MATCH</small>
@@ -114,12 +131,24 @@ export function PitDisplay({
                   : "Live queue unavailable")}
           </strong>
           <p>
-            {n?.queue
-              ? `Queue estimate ${at(n.queue)}`
-              : next?.scheduled
-                ? `Scheduled ${at(next.scheduled)}`
-                : ""}
+            {n?.actualQueue
+              ? `Actually queued ${at(n.actualQueue)}`
+              : n?.queue
+                ? `Queue estimate ${at(n.queue)}`
+                : next?.scheduled
+                  ? `Scheduled ${at(next.scheduled)}`
+                  : ""}
           </p>
+          {delay && (
+            <p className="comp-delay">
+              {scheduleStale ? "Stale · " : ""}Last measured event delay:{" "}
+              {delay.minutes === 0
+                ? "on schedule"
+                : `${Math.abs(delay.minutes)} min ${delay.minutes > 0 ? "behind" : "ahead"}`}{" "}
+              · {delay.match} actual start {at(delay.at)}. This is not a
+              forecast.
+            </p>
+          )}
           {c.liveAvailable && c.feed?.nexus?.nowQueuing && (
             <p>Event queue: {c.feed.nexus.nowQueuing}</p>
           )}
@@ -201,7 +230,57 @@ export function PitDisplay({
           )}
         </section>
       </div>
-      {c.context?.config && <EventStandings c={c} team={team} />}
+      {c.context?.config && (
+        <>
+          <div className="comp-display-extras">
+            <EventStream
+              key={`${c.feed?.eventKey}:${c.feed?.configVersion}`}
+              eventKey={c.feed?.eventKey || ""}
+              webcasts={c.feed?.webcasts || []}
+              fetchedAt={c.feed?.webcastsAt ?? null}
+              error={c.feed?.webcastsError ?? null}
+              online={c.online !== false}
+              stale={
+                externalStale || isStale(c.feed?.webcastsAt, c.tick, 600000)
+              }
+            />
+            <EventBoard
+              key={`${c.feed?.eventKey}:${c.feed?.configVersion}`}
+              board={c.feed?.nexusBoard || null}
+              boardAt={c.feed?.nexusBoardAt}
+              boardError={c.feed?.nexusBoardError}
+              boardStale={
+                externalStale ||
+                isStale(c.feed?.nexusBoardAt, c.tick, 120000) ||
+                isStale(c.feed?.nexusBoard?.asOf, c.tick, 120000)
+              }
+              map={c.feed?.pitMap || null}
+              mapAt={c.feed?.pitMapAt}
+              mapError={c.feed?.pitMapError}
+              mapStale={
+                externalStale || isStale(c.feed?.pitMapAt, c.tick, 600000)
+              }
+              addresses={c.feed?.pitAddresses}
+              addressesAt={c.feed?.pitAddressesAt}
+              addressesError={c.feed?.pitAddressesError}
+              addressesStale={
+                externalStale || isStale(c.feed?.pitAddressesAt, c.tick, 600000)
+              }
+              now={c.tick}
+              team={team}
+            />
+          </div>
+          {next && !isManualMatch(next) && (
+            <StatboticsComparison
+              feed={c.feed}
+              teams={[...next.red, ...next.blue].map(Number)}
+              now={c.tick}
+              unavailable={externalStale}
+            />
+          )}
+          <EventStandings c={c} team={team} />
+        </>
+      )}
       {state.issues.filter((i) => !["HIGH", "ROBOT DOWN"].includes(i.severity))
         .length > 0 && (
         <section className="card">

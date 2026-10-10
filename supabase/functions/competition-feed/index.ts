@@ -2,8 +2,11 @@ import {createClient} from 'npm:@supabase/supabase-js@2.116.0';
 import {parseEventMatches,parseEventTeams,parseNexus,type EventMatch,type EventTeam,type Match} from './external.ts';
 import {createCache} from './cache.ts';
 import {createStandingsFeed} from './standings.ts';
+import {createDisplayFeed} from './display-feed.ts';
 const cached=createCache();
 const getStandings=createStandingsFeed(cached);
+const getDisplay=createDisplayFeed(cached);
+const nexusSnapshots=new Map<string,{nexus:ReturnType<typeof parseNexus>;at:number}>();
 // A malformed HTTP 200 must not overwrite the last validated roster or refresh
 // its displayed timestamp. Both caches are bounded and keyed by event identity.
 const teamSnapshots=new Map<string,{eventTeams:EventTeam[];teamsAt:number}>();
@@ -38,10 +41,18 @@ Deno.serve(async req=>{
  const {data:c,error}=await db.from('pit_event_config').select('*').eq('event_id',event.id).maybeSingle();if(error)return reply({error:'Competition configuration unavailable'},503);
  if(!c)return reply({eventId:event.id,configured:false});
  const base='https://www.thebluealliance.com/api/v3',tbaKey=Deno.env.get('TBA_API_KEY'),nexusKey=Deno.env.get('NEXUS_API_KEY');
- const [info,matches,live,standings,eventTeams]=await Promise.all([cached(`${base}/event/${encodeURIComponent(c.tba_event_key)}/simple`,'X-TBA-Auth-Key',tbaKey,300000),cached(`${base}/event/${encodeURIComponent(c.tba_event_key)}/matches/simple`,'X-TBA-Auth-Key',tbaKey,60000),c.nexus_event_key?cached(`https://frc.nexus/api/v1/event/${encodeURIComponent(c.nexus_event_key)}`,'Nexus-Api-Key',nexusKey,30000):Promise.resolve({data:null,at:null,error:'Nexus not configured'}),getStandings(c.tba_event_key,c.team_number,tbaKey),getEventTeams(c.tba_event_key,tbaKey)]);
- let scoutingMatches:EventMatch[]=[],nexus=null,tbaError=matches.error,nexusError=live.error;
+ const liveRequest=c.nexus_event_key?cached(`https://frc.nexus/api/v1/event/${encodeURIComponent(c.nexus_event_key)}`,'Nexus-Api-Key',nexusKey,30000):Promise.resolve({data:null,at:null,error:'Nexus not configured'});
+ const [display,matches,live,standings,eventTeams]=await Promise.all([getDisplay(c.tba_event_key,c.nexus_event_key,tbaKey,nexusKey,liveRequest),cached(`${base}/event/${encodeURIComponent(c.tba_event_key)}/matches/simple`,'X-TBA-Auth-Key',tbaKey,60000),liveRequest,getStandings(c.tba_event_key,c.team_number,tbaKey),getEventTeams(c.tba_event_key,tbaKey)]);
+ let scoutingMatches:EventMatch[]=[],nexus=null,tbaError=matches.error,nexusError=live.error,nexusAt=live.at||null;
  try{if(matches.data)scoutingMatches=parseEventMatches(matches.data,c.tba_event_key,c.team_number);}catch{tbaError='TBA response unavailable';}
  const parsed=scoutingMatches.filter((m):m is Match=>m.alliance!==null);
- try{if(live.data)nexus=parseNexus(live.data,c.nexus_event_key,c.team_number);}catch{nexusError='Nexus response unavailable';}
- return reply({eventId:event.id,configured:true,configVersion:c.version,team:c.team_number,eventKey:c.tba_event_key,eventName:typeof info.data?.name==='string'?info.data.name:null,matches:parsed,scoutingMatches,tbaAt:matches.at||null,tbaError,nexus,nexusAt:live.at||null,nexusError,...standings,...eventTeams});
+ const nexusId=`${c.nexus_event_key}:${c.team_number}`,previousNexus=nexusSnapshots.get(nexusId);
+ try{
+  if(live.error||!live.at)throw new Error('Nexus unavailable');
+  const parsedNexus=parseNexus(live.data,c.nexus_event_key,c.team_number);
+  if(parsedNexus.asOf>live.at+60000||(previousNexus&&parsedNexus.asOf<previousNexus.nexus.asOf))throw new Error('Invalid source time');
+  nexus=parsedNexus;nexusSnapshots.set(nexusId,{nexus,at:live.at});
+  if(nexusSnapshots.size>32)nexusSnapshots.delete(nexusSnapshots.keys().next().value!);
+ }catch{nexus=previousNexus?.nexus??null;nexusAt=previousNexus?.at??null;nexusError=live.error||'Nexus response unavailable or older than the last snapshot';}
+ return reply({eventId:event.id,configured:true,configVersion:c.version,team:c.team_number,eventKey:c.tba_event_key,matches:parsed,scoutingMatches,tbaAt:matches.at||null,tbaError,nexus,nexusAt,nexusError,...standings,...eventTeams,...display});
 });
