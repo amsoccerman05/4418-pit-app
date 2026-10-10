@@ -27,8 +27,12 @@ test("scouting match and pit capture preserve observed zero, unknowns, schedule 
     "Practice 1",
   );
   await page.getByLabel("Choose a loaded match").selectOption("2026test_qm17");
-  await page.getByLabel("Alliance", { exact: true }).selectOption("red");
-  await page.getByLabel("Station", { exact: true }).selectOption("2");
+  await page
+    .getByRole("combobox", { name: "Alliance", exact: true })
+    .selectOption("red");
+  await page
+    .getByRole("combobox", { name: "Station", exact: true })
+    .selectOption("2");
   await expect(page.getByLabel("AUTO fuel", { exact: true })).toHaveValue("");
   await page
     .locator(".scout-counter")
@@ -43,9 +47,11 @@ test("scouting match and pit capture preserve observed zero, unknowns, schedule 
     .filter({ hasText: "TELEOP fuel" })
     .getByRole("button", { name: "+5", exact: true })
     .click();
-  await page.getByLabel("Endgame climb", { exact: true }).selectOption("L2");
   await page
-    .getByLabel("Driver ability · 1–5", { exact: true })
+    .getByRole("combobox", { name: "Endgame climb", exact: true })
+    .selectOption("L2");
+  await page
+    .getByRole("combobox", { name: "Driver ability · 1–5", exact: true })
     .selectOption("4");
   await page
     .getByLabel("Match notes / breakdown detail")
@@ -360,7 +366,9 @@ test("scouting shared picklist supports reviewed edit and conflict, assignment t
   await scoutTab(page, "Assignments");
   await page.getByLabel("Assigned team").fill("1619");
   await page.getByLabel("Assigned match ID").fill("qm1");
-  await page.getByLabel("Scout", { exact: true }).selectOption(otherActorId);
+  await page
+    .getByRole("combobox", { name: "Scout", exact: true })
+    .selectOption(otherActorId);
   await page.getByRole("button", { name: "Assign scout", exact: true }).click();
   await expect(page.locator(".scout-record")).toContainText(
     "Fixture Scout B · Awaiting report",
@@ -381,7 +389,9 @@ test("scouting shared picklist supports reviewed edit and conflict, assignment t
   await page
     .getByRole("button", { name: "Edit assignment", exact: true })
     .click();
-  await page.getByLabel("Scout", { exact: true }).selectOption("");
+  await page
+    .getByRole("combobox", { name: "Scout", exact: true })
+    .selectOption("");
   await page
     .getByRole("button", { name: "Update assignment", exact: true })
     .click();
@@ -591,7 +601,9 @@ test("scouting student with server-verified leadership can manage shared picks a
   await scoutTab(page, "Assignments");
   await page.getByLabel("Assigned team").fill("4418");
   await page.getByLabel("Assigned match ID").fill("qm1");
-  await page.getByLabel("Scout", { exact: true }).selectOption(otherActorId);
+  await page
+    .getByRole("combobox", { name: "Scout", exact: true })
+    .selectOption(otherActorId);
   await page.getByRole("button", { name: "Assign scout", exact: true }).click();
   await expect(page.locator(".scout-record")).toContainText(
     "Fixture Scout B · Awaiting report",
