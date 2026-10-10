@@ -73,6 +73,9 @@ test("missing, stale, failed and changed-lineup predictions never fabricate perc
   for (const p of [null, undefined, -1, 2, "0.7"]) {
     feed.matchPredictions[0].redWinProbability = p;
     await page.reload();
+    await expect(card).toContainText(
+      "No Statbotics prediction for this match and lineup yet.",
+    );
     await expect(card.locator(".comp-win-alliances")).toHaveCount(0);
   }
   feed.matchPredictions[0].redWinProbability = 0.7345;
@@ -121,5 +124,8 @@ test("manual practice and the next official match cannot inherit a different mat
   await expect(card.locator(".comp-win-alliances")).toHaveCount(0);
   feed.matches = [];
   await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "No upcoming match published" }),
+  ).toBeVisible();
   await expect(card).toHaveCount(0);
 });
