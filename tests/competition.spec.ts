@@ -12,7 +12,7 @@ test('configured dashboard, match prep, blocking checklist, battery assignment a
 test('Nexus stale/unavailable falls back; templates are leadership only; local workspace survives outage',async({page})=>{
  const {feed}=await setup(page,false);feed.nexusError='Unavailable';await page.getByRole('button',{name:'Refresh schedule'}).click();await expect(page.getByText('Live timing unavailable — using TBA schedule',{exact:false})).toBeVisible();await expect(page.locator('.comp-next')).toContainText('Scheduled');await expect(page.locator('.comp-next')).not.toContainText('Now queuing');
  feed.tbaError='Offline';feed.matches=[];await page.getByRole('button',{name:'Refresh schedule'}).click();await expect(page.locator('.comp-next')).toContainText('Q17');
- await nav(page,'Checklists');await expect(page.getByRole('button',{name:'New template'})).toHaveCount(0);await expect(page.getByRole('heading',{name:'Student-built preflight'})).toBeVisible();await nav(page,'Batteries');await expect(page.getByText('B01',{exact:true}).first()).toBeVisible();
+ await nav(page,'Checklists');await expect(page.getByRole('button',{name:'New template'})).toHaveCount(0);await expect(page.getByRole('heading',{name:'Student-built preflight'})).toBeVisible();await nav(page,'Batteries');await expect(page.getByRole('heading',{name:'Test',exact:true})).toBeVisible();
 });
 for(const kind of ['pre','post','general'])test(`checklist importance maps Required and Optional for ${kind}`,async({page})=>{
  const {calls}=await setup(page);await nav(page,'Checklists');await page.getByRole('button',{name:'New template'}).click();await page.getByLabel('Name',{exact:true}).fill('Inspection');await page.getByRole('combobox',{name:'Type',exact:true}).selectOption(kind);await page.getByLabel('Item text',{exact:true}).fill('Inspect intake');
@@ -39,6 +39,6 @@ test('dashboard progress, live turnaround, attention, announcements and stale fa
 });
 test('dashboard hides empty attention and explains existing readiness blockers',async({page})=>{
  const {context,data}=await setup(page);data.pit_batteries[0].status='ON ROBOT';context.matches=[{id:'ops',match_key:'2026test_qm17',battery_id:'battery'}];context.runs=[{id:'run',match_id:'ops',kind:'pre'}];context.items=[{id:'item',run_id:'run',required:true,blocking:true,completed_at:new Date().toISOString()}];
- await page.reload();await expect(page.getByRole('heading',{name:'ROBOT READY',exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'Needs attention',exact:true})).toHaveCount(0);await expect(page.locator('.comp-readiness')).toContainText('Battery B01 · ON ROBOT');
+ await page.reload();await expect(page.getByRole('heading',{name:'ROBOT READY',exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'Needs attention',exact:true})).toHaveCount(0);await expect(page.locator('.comp-readiness')).toContainText('Battery Test (B01) · ON ROBOT');
  context.items[0].completed_at=null;await page.getByRole('button',{name:'Refresh schedule'}).click();await expect(page.getByRole('heading',{name:'ROBOT NOT READY',exact:true})).toBeVisible();await expect(page.locator('.comp-readiness')).toContainText('1 required checks remaining · 1 blocking');await page.getByRole('button',{name:'View blockers',exact:true}).click();await expect(page.locator('.comp-attention')).toBeInViewport();
 });

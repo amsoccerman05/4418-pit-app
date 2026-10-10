@@ -256,7 +256,9 @@ export function PracticeControls({
             >
               <p>
                 {confirm.kind === "finish"
-                  ? "Mark this practice finished and open post-match inspection? Checklists and battery status still need to be recorded by the crew."
+                  ? d.templates.some((t) => t.active && t.kind === "post")
+                    ? "Mark this practice finished and open post-match inspection? Checklists and battery status still need to be recorded by the crew."
+                    : "Mark this practice finished? This does not change battery status."
                   : "Hide this practice from the active list? Existing checklists, issues and unfinished inspections remain available and still count toward readiness."}
               </p>
               <button

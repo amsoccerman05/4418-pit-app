@@ -64,7 +64,7 @@ test("battery acceptance: match assignment, quick removal and ready voltage", as
     page
       .locator("article")
       .filter({ has: page.getByRole("heading", { name: id, exact: true }) });
-  await card("B01")
+  await card("Competition battery")
     .getByRole("button", { name: "Remove battery", exact: true })
     .click();
   await page
@@ -208,10 +208,10 @@ test("admin manages events and batteries; completed issues stay accessible", asy
   ).toBeVisible();
   await nav(page, "Batteries");
   await page.getByRole("button", { name: "Add battery" }).click();
-  await page.getByLabel("Battery number *").fill("B11");
+  await page.getByLabel("Battery name *").fill("New practice battery");
   await page.getByRole("button", { name: "Save battery", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "B11", exact: true }),
+    page.getByRole("heading", { name: "New practice battery", exact: true }),
   ).toBeVisible();
 });
 
@@ -249,7 +249,12 @@ test("battery header respects management permissions and simple actions stay one
   await expect(page.getByRole("dialog")).not.toBeVisible();
   const b01 = page
     .locator("article")
-    .filter({ has: page.getByRole("heading", { name: "B01", exact: true }) });
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Competition battery",
+        exact: true,
+      }),
+    });
   await b01
     .getByRole("button", { name: "Remove battery", exact: true })
     .click();
@@ -272,7 +277,12 @@ for (const [status, match] of [
     await nav(page, "Batteries");
     const b01 = page
       .locator("article")
-      .filter({ has: page.getByRole("heading", { name: "B01", exact: true }) });
+      .filter({
+        has: page.getByRole("heading", {
+          name: "Competition battery",
+          exact: true,
+        }),
+      });
     await b01
       .getByRole("button", { name: "Remove battery", exact: true })
       .click();

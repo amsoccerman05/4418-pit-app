@@ -1565,3 +1565,17 @@ a:focus-visible, button:focus-visible { outline-color: var(--suite-primary); }
 .connection-status button{flex-shrink:0}
 .connection-stale{color:#62440c;background:#fff6dc;border-color:#d8b971;padding:.8rem;border-radius:8px}
 @media(max-width:600px){.connection-status{align-items:stretch;flex-direction:column}}
+
+/* Physical battery names can be long; never clip the identity or push actions off-screen. */
+.battery-card h2, .battery-hero h2, .battery-identity, .battery-system-reference { overflow-wrap: anywhere; min-width: 0; }
+.battery-identity { text-align: left; }
+.battery-identity small, .battery-system-reference { color: var(--suite-muted); font-size: 12px; }
+.battery-identity small { display: block; margin-top: 3px; }
+.battery-hero { flex-wrap: wrap; }
+.battery-hero h2 { flex: 1 1 160px; }
+.mini-fleet button > svg, .mini-fleet .badge { flex-shrink: 0; }
+
+.dialog-head h2 { min-width: 0; overflow-wrap: anywhere; }
+.dialog-head > button { flex-shrink: 0; }
+
+.battery-identity-conflict { overflow-wrap: anywhere; min-width: 0; }

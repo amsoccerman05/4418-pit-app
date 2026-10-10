@@ -177,3 +177,36 @@ export function batteryMatch(battery: Battery, events: BatteryEvent[]): string {
     ""
   );
 }
+
+// Physical names lead the UI; UUIDs and legacy B-codes remain stable references.
+export function batteryName(
+  battery: Pick<Battery, "label" | "battery_number"> | null | undefined,
+  fallback = "Unknown battery",
+): string {
+  return battery ? battery.label?.trim() || battery.battery_number : fallback;
+}
+export function batteryReference(
+  battery: Pick<Battery, "label" | "battery_number"> | null | undefined,
+  fallback = "Unknown battery",
+): string {
+  if (!battery) return fallback;
+  const name = batteryName(battery);
+  return name === battery.battery_number
+    ? name
+    : `${name} (${battery.battery_number})`;
+}
+export function nextBatteryNumber(
+  batteries: Pick<Battery, "battery_number">[],
+): string | null {
+  // Include archived records and equivalent zero-padded codes; never reuse a reference.
+  const used = new Set(
+    batteries.map((b) =>
+      /^B\d{2,4}$/.test(b.battery_number)
+        ? Number(b.battery_number.slice(1))
+        : -1,
+    ),
+  );
+  for (let n = 1; n <= 9999; n++)
+    if (!used.has(n)) return `B${String(n).padStart(2, "0")}`;
+  return null;
+}
