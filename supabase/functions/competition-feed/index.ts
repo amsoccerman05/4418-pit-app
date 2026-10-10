@@ -3,9 +3,19 @@ import {parseEventMatches,parseEventTeams,parseNexus,type EventMatch,type EventT
 import {createCache} from './cache.ts';
 import {createStandingsFeed} from './standings.ts';
 import {createDisplayFeed} from './display-feed.ts';
+import {createMatch13Feed,createMatch13Store} from './match13-cache.ts';
+import {bindMatch13,currentTime,hasPrimaryPrediction,trustedUpcoming} from './match13.ts';
 const cached=createCache();
 const getStandings=createStandingsFeed(cached);
 const getDisplay=createDisplayFeed(cached);
+// Service role is used only for the private public-data cache, after user auth.
+// It is never returned, logged, or used for team-record queries.
+let match13Feed: ReturnType<typeof createMatch13Feed>|null=null;
+function getMatch13(){
+ if(!match13Feed){const key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');if(!key)return null;
+ const cacheDb=createClient(Deno.env.get('SUPABASE_URL')!,key,{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:(url,options)=>fetch(url,{...options,signal:AbortSignal.timeout(2000)})}});
+ match13Feed=createMatch13Feed(createMatch13Store(cacheDb));}return match13Feed;
+}
 const nexusSnapshots=new Map<string,{nexus:ReturnType<typeof parseNexus>;at:number}>();
 // A malformed HTTP 200 must not overwrite the last validated roster or refresh
 // its displayed timestamp. Both caches are bounded and keyed by event identity.
@@ -46,6 +56,15 @@ Deno.serve(async req=>{
  let scoutingMatches:EventMatch[]=[],nexus=null,tbaError=matches.error,nexusError=live.error,nexusAt=live.at||null;
  try{if(matches.data)scoutingMatches=parseEventMatches(matches.data,c.tba_event_key,c.team_number);}catch{tbaError='TBA response unavailable';}
  const parsed=scoutingMatches.filter((m):m is Match=>m.alliance!==null);
+ const now=Date.now(),primaryCurrent=!display.predictionsError&&currentTime(display.predictionsAt,now);
+ const needsBackup=!tbaError&&currentTime(matches.at,now)&&parsed.some(m=>trustedUpcoming(m,c.tba_event_key)&&(!primaryCurrent||!hasPrimaryPrediction(display.matchPredictions,m,c.tba_event_key)));
+ let match13={match13Predictions:[] as ReturnType<typeof bindMatch13>,match13At:null as number|null,match13Error:null as string|null};
+ const match13Key=Deno.env.get('MATCH13_API_KEY');
+ if(needsBackup){
+  const backup=match13Key?getMatch13():null;
+  const snapshot=backup?await backup(c.tba_event_key,match13Key):{data:[],at:null,error:'Match13 backup unavailable'};
+  match13={match13Predictions:bindMatch13(snapshot.data,parsed,c.tba_event_key),match13At:snapshot.at,match13Error:snapshot.error};
+ }
  const nexusId=`${c.nexus_event_key}:${c.team_number}`,previousNexus=nexusSnapshots.get(nexusId);
  try{
   if(live.error||!live.at)throw new Error('Nexus unavailable');
@@ -54,5 +73,5 @@ Deno.serve(async req=>{
   nexus=parsedNexus;nexusSnapshots.set(nexusId,{nexus,at:live.at});
   if(nexusSnapshots.size>32)nexusSnapshots.delete(nexusSnapshots.keys().next().value!);
  }catch{nexus=previousNexus?.nexus??null;nexusAt=previousNexus?.at??null;nexusError=live.error||'Nexus response unavailable or older than the last snapshot';}
- return reply({eventId:event.id,configured:true,configVersion:c.version,team:c.team_number,eventKey:c.tba_event_key,matches:parsed,scoutingMatches,tbaAt:matches.at||null,tbaError,nexus,nexusAt,nexusError,...standings,...eventTeams,...display});
+ return reply({eventId:event.id,configured:true,configVersion:c.version,team:c.team_number,eventKey:c.tba_event_key,matches:parsed,scoutingMatches,tbaAt:matches.at||null,tbaError,nexus,nexusAt,nexusError,...standings,...eventTeams,...display,...match13});
 });

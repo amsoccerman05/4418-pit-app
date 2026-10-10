@@ -29,6 +29,14 @@ export function mergeFeed(previous: Feed | null, incoming: Feed): Feed {
           predictionsAt: previous.predictionsAt,
         }
       : {}),
+    ...(incoming.match13Error &&
+    !incoming.match13Predictions?.length &&
+    previous.match13At
+      ? {
+          match13Predictions: previous.match13Predictions,
+          match13At: previous.match13At,
+        }
+      : {}),
     ...(incoming.nexusBoardError &&
     !incoming.nexusBoard &&
     previous.nexusBoardAt

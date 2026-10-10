@@ -124,6 +124,9 @@ export type Feed = {
   matchPredictions?: import("../../supabase/functions/competition-feed/statbotics").MatchPrediction[];
   predictionsAt?: number | null;
   predictionsError?: string | null;
+  match13Predictions?: import("../../supabase/functions/competition-feed/match13").Match13Prediction[];
+  match13At?: number | null;
+  match13Error?: string | null;
   nexusBoard?:
     | import("../../supabase/functions/competition-feed/nexus-board").NexusBoard
     | null;
@@ -256,6 +259,9 @@ export function useCompetition(
                   signal,
                 }),
               request.controller.signal,
+              // A cold primary timeout can be followed by the server backup.
+              // Keep this bounded without cancelling a valid fallback at 12s.
+              25000,
             );
             if (e) throw e;
             if (!valid()) return false;
