@@ -1,0 +1,126 @@
+.comp-queue-ribbon {
+  position: sticky;
+  top: -1px;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(190px, 1.5fr) minmax(
+      160px,
+      1fr
+    );
+  gap: 12px;
+  align-items: stretch;
+  padding: 10px;
+  margin: 12px 0 20px;
+  background: var(--suite-background, #f4f6f8);
+  border: 2px solid var(--suite-border, #ccd4d8);
+  border-radius: 12px;
+  box-shadow: 0 5px 15px #0002;
+}
+.comp-queue-ribbon > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px;
+  min-width: 0;
+}
+.comp-queue-ribbon strong {
+  font-size: clamp(1rem, 2.2vw, 2rem);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.comp-queue-ribbon small {
+  font-size: 0.8rem;
+}
+.comp-bumper {
+  background: #e4e8eb;
+  color: #192933;
+  border-radius: 8px;
+}
+.comp-bumper-red {
+  background: #b32032;
+  color: white;
+}
+.comp-bumper-blue {
+  background: #164f99;
+  color: white;
+}
+.comp-epa {
+  margin-top: 20px;
+}
+.comp-epa h3 {
+  margin-top: 0;
+}
+.comp-epa-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.comp-epa-grid article {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--suite-border, #ccd4d8);
+  border-radius: 8px;
+  padding: 12px;
+}
+.comp-epa-total {
+  font-size: 1.6rem;
+  font-weight: 750;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+.comp-epa dl {
+  font-size: 0.8rem;
+  margin: 12px 0 0;
+}
+.comp-epa dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+}
+.comp-epa dd {
+  margin: 0;
+}
+.comp-delay {
+  font-size: 0.9em;
+}
+.comp-display-extras {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+.comp-compare-next {
+  margin-bottom: 12px;
+}
+@media (max-width: 700px) {
+  .comp-queue-ribbon {
+    gap: 4px;
+    padding: 6px;
+    grid-template-columns: 1fr 1.25fr;
+    margin-bottom: 12px;
+  }
+  .comp-queue-ribbon > div {
+    padding: 6px;
+  }
+  .comp-queue-ribbon strong {
+    font-size: 1rem;
+  }
+  .comp-queue-ribbon small {
+    font-size: 0.7rem;
+  }
+  .comp-ribbon-readiness {
+    grid-column: 1/-1;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center;
+    justify-content: space-between !important;
+  }
+  .comp-epa-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .comp-epa-total {
+    font-size: 1.25rem;
+  }
+}

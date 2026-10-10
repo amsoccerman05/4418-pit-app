@@ -156,3 +156,11 @@ test("event roster retains only same-event failed snapshots and clears successfu
   );
   assert.equal(mergeFeed(previous, old).eventTeams, undefined);
 });
+
+test('cross-instance older Nexus snapshots preserve current scope clocks and warn without masking event changes',()=>{
+ const before={...old,nexus:{asOf:1800000060000,matches:[]},nexusAt:1800000065000,nexusBoard:{asOf:1800000060000,announcements:[{text:'new'}]},nexusBoardAt:1800000065000};
+ const incoming={...before,nexus:{asOf:1800000000000,matches:[]},nexusAt:1800000070000,nexusBoard:{asOf:1800000000000,announcements:[]},nexusBoardAt:1800000070000};
+ const result=mergeFeed(before,incoming);assert.deepEqual(result.nexus,before.nexus);assert.equal(result.nexusAt,before.nexusAt);assert.ok(result.nexusError);assert.deepEqual(result.nexusBoard,before.nexusBoard);assert.ok(result.nexusBoardError);
+ assert.deepEqual(mergeFeed(before,{...incoming,eventId:'different'}).nexusBoard,incoming.nexusBoard);
+ const future=mergeFeed(before,{...incoming,nexusBoard:{asOf:1800000070000+60001,announcements:[]}});assert.deepEqual(future.nexusBoard,before.nexusBoard);assert.ok(future.nexusBoardError);
+});

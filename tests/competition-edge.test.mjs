@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 import {parseEventMatches,parseEventTeams,parseMatches,parseNexus} from '../supabase/functions/competition-feed/external.ts';
 import {createStandingsFeed} from '../supabase/functions/competition-feed/standings.ts';
+import {createDisplayFeed} from '../supabase/functions/competition-feed/display-feed.ts';
 
 const secret='test-server-secret';
 const status={qual:{num_teams:40,ranking:{team_key:'frc4418',rank:7,record:{wins:5,losses:2,ties:1}}},playoff:{record:{wins:4,losses:0,ties:0}},overall_status_str:'Do not expose upstream HTML'};
@@ -16,10 +17,14 @@ function fixture(){
  const code=ts.transpileModule(source.replace(/import .*?;\n/g,''),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
  const db={auth:{getUser:async()=>({data:{user:state.user},error:state.authError})},from(table){const q={select(){return q},eq(){return q},single:async()=>({data:{active:state.active}}),maybeSingle:async()=>({data:table==='pit_events'?state.event:state.config,error:table==='pit_event_config'?state.configError:null})};return q;}};
  const cache=async(url,header,key,ttl)=>{
-  state.requests.push({url,header,key,ttl});assert.equal(key,secret);
-  return {data:url.endsWith('/status')?state.status:url.includes('/matches/')?state.matches:url.includes('/teams/')?state.teams:url.includes('frc.nexus')?{eventKey:'test',dataAsOfTime:state.at,matches:[],announcements:[]}:{name:'Test event'},at:url.includes('/matches/')?state.matchAt:url.includes('/teams/')?state.teamsAt:state.at,error:url.endsWith('/status')?state.standingsError:url.includes('/matches/')?state.matchError:url.includes('/teams/')?state.teamsError:null};
+  state.requests.push({url,header,key,ttl});
+  if(url.startsWith('https://api.statbotics.io/')) {assert.equal(key,undefined);assert.equal(header,null);return {data:[],at:state.at,error:null};}
+  assert.equal(key,secret);
+  if(url.endsWith('/map'))return {data:null,at:state.at,error:null,notFound:true};
+  if(url.endsWith('/pits'))return {data:{},at:state.at,error:null};
+  return {data:url.endsWith('/status')?state.status:url.includes('/matches/')?state.matches:url.includes('/teams/')?state.teams:url.includes('frc.nexus')?{eventKey:'test',dataAsOfTime:state.nexusAsOf??state.at,matches:[],announcements:[],partsRequests:[]}:{key:state.config.tba_event_key,name:'Test event',webcasts:[]},at:url.includes('/matches/')?state.matchAt:url.includes('/teams/')?state.teamsAt:state.at,error:url.endsWith('/status')?state.standingsError:url.includes('/matches/')?state.matchError:url.includes('/teams/')?state.teamsError:null};
  };
- new Function('Deno','createClient','createCache','parseEventMatches','parseEventTeams','parseNexus','createStandingsFeed',code)({env:{get:()=>secret},serve:h=>handler=h},()=>db,()=>cache,parseEventMatches,parseEventTeams,parseNexus,createStandingsFeed);
+ new Function('Deno','createClient','createCache','parseEventMatches','parseEventTeams','parseNexus','createStandingsFeed','createDisplayFeed',code)({env:{get:()=>secret},serve:h=>handler=h},()=>db,()=>cache,parseEventMatches,parseEventTeams,parseNexus,createStandingsFeed,createDisplayFeed);
  return {state,request:(headers={authorization:'Bearer test'},method='POST')=>handler(new Request('https://example.test/feed',{method,headers}))};
 }
 
@@ -33,7 +38,7 @@ test('feed handler gates origin/auth/active profile and exposes only normalized 
  state.user={id:'member'};state.authError={message:'Invalid token'};assert.equal((await request()).status,401);state.authError=null;state.active=false;assert.equal((await request()).status,403);assert.equal(state.requests.length,0);
  state.active=true;const response=await request({origin:'https://pit.frc4418.org',authorization:'Bearer test'});
  assert.equal(response.status,200);const body=await response.text();assert.ok(!body.includes(secret));assert.ok(!body.includes('upstream HTML'));assert.ok(!body.includes('playoff'));assert.ok(!body.includes('team_key'));
- const feed=JSON.parse(body);assert.equal(feed.configured,true);assert.equal(state.requests.length,5);assert.equal(response.headers.get('access-control-allow-origin'),'https://pit.frc4418.org');
+ const feed=JSON.parse(body);assert.equal(feed.configured,true);assert.equal(state.requests.length,8);assert.equal(response.headers.get('access-control-allow-origin'),'https://pit.frc4418.org');
  assert.deepEqual(feed.standings,{scope:'qualification',rank:7,numTeams:40,record:{wins:5,losses:2,ties:1}});
  assert.equal(feed.standingsAt,state.at);assert.equal(feed.standingsError,null);assert.equal(feed.standingsStale,false);
  const standingsRequest=state.requests.find(r=>r.url.endsWith('/status'));
@@ -52,7 +57,7 @@ test('one event schedule request provides all scouting matches and the unchanged
  assert.equal(feed.tbaAt,state.matchAt);assert.equal(feed.tbaError,null);
  const schedules=state.requests.filter(r=>r.url.includes('/matches/'));
  assert.deepEqual(schedules,[{url:'https://www.thebluealliance.com/api/v3/event/2026test/matches/simple',header:'X-TBA-Auth-Key',key:secret,ttl:60000}]);
- assert.equal(state.requests.length,5);assert.equal(feed.nexus.matches.length,0);assert.equal(feed.standings.rank,7);
+ assert.equal(state.requests.length,8);assert.equal(feed.nexus.matches.length,0);assert.equal(feed.standings.rank,7);
 });
 
 test('event directory uses the existing server credential and is available before schedules or reports',async()=>{
@@ -142,4 +147,11 @@ test('unpublished, initially unavailable and changed-event standings never displ
  state.status=status;feed=await (await request()).json();assert.equal(feed.standings.rank,7);
  state.config={...state.config,tba_event_key:'2026other',version:2};state.standingsError='API key not configured';state.status=null;
  feed=await (await request()).json();assert.equal(feed.standings,null);assert.equal(feed.standingsAt,null);assert.equal(feed.standingsStale,false);assert.equal(feed.standingsError,'API key not configured');
+});
+
+test('queue normalization rejects regressing or future source times and recovers with a current snapshot',async()=>{
+ const {state,request}=fixture();const first=await (await request()).json();state.at+=30000;state.nexusAsOf=first.nexus.asOf-30000;
+ let feed=await (await request()).json();assert.deepEqual(feed.nexus,first.nexus);assert.equal(feed.nexusAt,first.nexusAt);assert.ok(feed.nexusError);
+ state.nexusAsOf=state.at+60001;feed=await (await request()).json();assert.deepEqual(feed.nexus,first.nexus);assert.ok(feed.nexusError);
+ state.nexusAsOf=state.at;feed=await (await request()).json();assert.equal(feed.nexus.asOf,state.at);assert.equal(feed.nexusError,null);
 });

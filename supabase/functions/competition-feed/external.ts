@@ -3,7 +3,7 @@
 export type EventMatch = {key:string;label:string;level:string;number:number;set:number;red:string[];blue:string[];alliance:'red'|'blue'|null;scheduled:number|null;predicted:number|null;actual:number|null;completed:boolean;redScore:number|null;blueScore:number|null;winner:string};
 export type Match = EventMatch & {alliance:'red'|'blue'};
 export type EventTeam = {key:string;number:number;name:string|null};
-export type LiveMatch = {label:string;status:string;red:string[];blue:string[];queue:number|null;estimated:number|null;committed:number|null;replayOf:string|null};
+export type LiveMatch = {label:string;status:string;red:string[];blue:string[];queue:number|null;actualQueue?:number|null;estimated:number|null;committed:number|null;replayOf:string|null};
 const time=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)&&v>0?v:null;
 const teams=(v:unknown)=>Array.isArray(v)?v.filter(x=>typeof x==='string').map(x=>x.replace(/^frc/,'')):[];
 // Team_Simple includes the public nickname and full name. Keep only the display
@@ -36,7 +36,7 @@ export function parseMatches(raw:unknown,event:string,team:number):Match[]{
 }
 export function parseNexus(raw:any,event:string,team:number){
  if(!raw||raw.eventKey!==event||!Array.isArray(raw.matches)||!time(raw.dataAsOfTime))throw new Error('Invalid Nexus event response');
- const matches:LiveMatch[]=raw.matches.filter((m:any)=>[...teams(m.redTeams),...teams(m.blueTeams)].includes(String(team))).map((m:any)=>({label:String(m.label||''),status:['Queuing soon','Now queuing','On deck','On field'].includes(m.status)?m.status:'Status unavailable',red:teams(m.redTeams),blue:teams(m.blueTeams),queue:time(m.times?.estimatedQueueTime),estimated:time(m.times?.estimatedStartTime),committed:time(m.times?.actualCommitTime),replayOf:typeof m.replayOf==='string'?m.replayOf:null}));
+ const matches:LiveMatch[]=raw.matches.filter((m:any)=>[...teams(m.redTeams),...teams(m.blueTeams)].includes(String(team))).map((m:any)=>({label:String(m.label||''),status:['Queuing soon','Now queuing','On deck','On field'].includes(m.status)?m.status:'Status unavailable',red:teams(m.redTeams),blue:teams(m.blueTeams),queue:time(m.times?.estimatedQueueTime),actualQueue:time(m.times?.actualQueueTime),estimated:time(m.times?.estimatedStartTime),committed:time(m.times?.actualCommitTime),replayOf:typeof m.replayOf==='string'?m.replayOf:null}));
  return {asOf:raw.dataAsOfTime as number,nowQueuing:typeof raw.nowQueuing==='string'?raw.nowQueuing:null,matches,announcements:(Array.isArray(raw.announcements)?raw.announcements:[]).filter((a:any)=>typeof a.announcement==='string').slice(-10).map((a:any)=>({id:String(a.id),text:a.announcement.slice(0,3000),at:time(a.postedTime)}))};
 }
 // Nexus labels are not stable TBA IDs. Only join unambiguous qualification/final

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { StatboticsComparison } from "../competition/StatboticsComparison";
+import "../competition/live-display.css";
 import type { Data, Profile } from "../model";
 import type { Competition, EventMatch } from "../competition/service";
 import { isStale } from "../competition/feed-state";
@@ -518,6 +520,56 @@ function ScoutingEvent({
               Select teams below. Missing data stays blank; small samples are
               not predictions.
             </p>
+            {schedule.find((m) => m.alliance && !m.completed && !m.actual) && (
+              <button
+                className="comp-compare-next"
+                onClick={() => {
+                  const match = schedule.find(
+                    (m) => m.alliance && !m.completed && !m.actual,
+                  );
+                  if (match)
+                    setSelected(
+                      [
+                        ...new Set([...match.red, ...match.blue].map(Number)),
+                      ].slice(0, 6),
+                    );
+                }}
+              >
+                Compare next 4418 match
+              </button>
+            )}
+            {!!schedule.length && (
+              <label>
+                Compare a scheduled match
+                <select
+                  aria-label="Compare a scheduled match"
+                  value=""
+                  onChange={(e) => {
+                    const match = schedule.find(
+                      (m) => m.key === e.target.value,
+                    );
+                    if (match)
+                      setSelected(
+                        [
+                          ...new Set([...match.red, ...match.blue].map(Number)),
+                        ].slice(0, 6),
+                      );
+                  }}
+                >
+                  <option value="">Choose a match</option>
+                  {schedule.map((m) => (
+                    <option key={m.key} value={m.key}>
+                      {m.label} · {m.red.join(", ")} / {m.blue.join(", ")}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {scheduleStale && schedule.length > 0 && (
+              <p className="comp-stale">
+                Match lineups may be stale. Confirm with the field schedule.
+              </p>
+            )}
             <div className="scout-team-chips">
               {summaries.map((x) => (
                 <button
@@ -539,6 +591,12 @@ function ScoutingEvent({
               ))}
             </div>
           </section>
+          <StatboticsComparison
+            feed={scheduleFeed}
+            teams={selected}
+            now={competition.tick}
+            unavailable={!s.online || !!competition.feedError}
+          />
           {selected.length ? (
             <div className="scout-table-wrap">
               <table>

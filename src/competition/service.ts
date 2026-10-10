@@ -115,6 +115,27 @@ export type Feed = {
   standingsAt?: number | null;
   standingsError?: string | null;
   standingsStale?: boolean;
+  webcasts?: import("../../supabase/functions/competition-feed/webcasts").EventWebcast[];
+  webcastsAt?: number | null;
+  webcastsError?: string | null;
+  teamEPAs?: import("../../supabase/functions/competition-feed/statbotics").TeamEPA[];
+  epaAt?: number | null;
+  epaError?: string | null;
+  nexusBoard?:
+    | import("../../supabase/functions/competition-feed/nexus-board").NexusBoard
+    | null;
+  nexusBoardAt?: number | null;
+  nexusBoardError?: string | null;
+  pitMap?:
+    | import("../../supabase/functions/competition-feed/nexus-board").PitMap
+    | null;
+  pitMapAt?: number | null;
+  pitMapError?: string | null;
+  pitAddresses?:
+    | import("../../supabase/functions/competition-feed/nexus-board").PitAddresses
+    | null;
+  pitAddressesAt?: number | null;
+  pitAddressesError?: string | null;
   tbaAt: number | null;
   tbaError: string | null;
   nexus: ReturnType<typeof parseNexus> | null;
