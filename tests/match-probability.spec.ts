@@ -124,6 +124,7 @@ test("manual practice and the next official match cannot inherit a different mat
   await expect(card.locator(".comp-win-alliances")).toHaveCount(0);
   feed.matches = [];
   await page.reload();
+  await expect(page.locator(".comp-live-strip")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "No upcoming match published" }),
   ).toBeVisible();
