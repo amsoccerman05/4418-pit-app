@@ -124,3 +124,12 @@
     font-size: 1.25rem;
   }
 }
+
+/* Suite-wide muted labels must not reduce contrast on alliance backgrounds. */
+.comp-pit-display .comp-bumper small {
+  color: inherit;
+}
+.comp-pit-display :is(button, input, select, a, [tabindex]),
+.comp-pit-display .event-board-map-scroll {
+  scroll-margin-top: 160px;
+}

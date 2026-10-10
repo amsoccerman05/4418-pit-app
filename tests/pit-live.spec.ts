@@ -128,6 +128,10 @@ test("pit stream is opt-in, closeable, and keeps readiness visible while scrolli
 }, info) => {
   const { display } = await liveFixture(page);
   await expect(display.locator("iframe")).toHaveCount(0);
+  await page.screenshot({
+    path: `test-results/pit-live-overview-${info.project.name}.png`,
+    fullPage: false,
+  });
   await expect(display.locator(".comp-queue-ribbon")).toContainText(
     "RED BUMPERS",
   );
@@ -151,7 +155,7 @@ test("pit stream is opt-in, closeable, and keeps readiness visible while scrolli
   expect(ribbon!.y + ribbon!.height).toBeLessThan(250);
   await page.screenshot({
     path: `test-results/pit-live-stream-${info.project.name}.png`,
-    fullPage: true,
+    fullPage: false,
   });
   const source = await frame.getAttribute("src");
   await page.waitForTimeout(1100);
@@ -220,9 +224,10 @@ test("parts requests locate exact pits, map closes cleanly and layout fits phone
       name: "Event pit map. Use team lookup for a text address.",
     }),
   ).toBeVisible();
+  await display.locator(".event-board-map-scroll").scrollIntoViewIfNeeded();
   await page.screenshot({
     path: `test-results/pit-live-map-${info.project.name}.png`,
-    fullPage: true,
+    fullPage: false,
   });
   expect(await display.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(
     true,
@@ -318,7 +323,7 @@ test("one-tap six-team EPA comparison stays alongside private synced scouting an
   ).toContainText("15.0");
   await page.screenshot({
     path: `test-results/pit-live-comparison-${info.project.name}.png`,
-    fullPage: true,
+    fullPage: false,
   });
   await page
     .getByLabel("Compare a scheduled match", { exact: true })
@@ -326,9 +331,7 @@ test("one-tap six-team EPA comparison stays alongside private synced scouting an
   await expect(page.locator(".comp-epa-grid article").first()).toContainText(
     "Team 1001",
   );
-  await page
-    .getByLabel("Scouting event", { exact: true })
-    .selectOption(historicalEventId);
+  await page.getByLabel("Scouting event").selectOption(historicalEventId);
   await scoutTab(page, "Compare");
   await expect(
     page.getByRole("button", { name: "Compare next 4418 match" }),
