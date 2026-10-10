@@ -136,3 +136,66 @@ test("zero match and playoff set numbers are rejected before immutable queueing"
   for (const key of ["qm0", "p0", "sf0m1", "f1m0", "2026test_qm000"])
     assert.throws(() => validateReport(report("one", key)), /positive/);
 });
+
+const { withEventTeams } = require("../src/scouting/directory.ts");
+const { optionLabel, ratingLabel } = require("../src/scouting/labels.ts");
+test("event roster gives unscouted teams null metrics while retaining report-only and manual teams", () => {
+  const roster = [
+    { number: 1234, key: "frc1234", name: "Synthetic team" },
+    { number: 4418, key: "frc4418", name: "IMPULSE" },
+  ];
+  const rows = withEventTeams(
+    summarize([
+      report("one", "manual:practice", { auto_fuel: 0, teleop_fuel: 0 }),
+    ]),
+    roster,
+  );
+  assert.deepEqual(
+    rows.map((r) => r.team),
+    [1234, 4418],
+  );
+  assert.equal(rows[0].name, "Synthetic team");
+  assert.equal(rows[0].observations.length, 0);
+  for (const k of [
+    "auto",
+    "teleop",
+    "fuel",
+    "climbRate",
+    "disabledRate",
+    "driver",
+    "defense",
+  ])
+    assert.equal(rows[0][k], null);
+  assert.equal(rows[1].fuel, 0);
+  assert.equal(rows[1].fuelMatches, 1);
+  const reportOnly = withEventTeams(summarize([report("one")]), [roster[0]]);
+  assert.equal(reportOnly.find((r) => r.team === 4418).listed, false);
+  assert.equal(reportOnly.find((r) => r.team === 4418).matches, 1);
+  assert.equal(withEventTeams(summarize([report("one")]), []).length, 1);
+});
+test("adding synced reports fills roster summaries without duplicating teams or fabricating samples", () => {
+  const roster = [{ number: 4418, key: "frc4418", name: "IMPULSE" }];
+  assert.equal(withEventTeams([], roster)[0].fuel, null);
+  const [row] = withEventTeams(
+    summarize([report("one", "qm1", { auto_fuel: 2, teleop_fuel: 8 })]),
+    roster,
+  );
+  assert.equal(row.name, "IMPULSE");
+  assert.equal(row.fuel, 10);
+  assert.equal(row.matches, 1);
+});
+test("contextual labels preserve explicit failed/no-attempt results and anchored rating scales", () => {
+  assert.equal(
+    optionLabel("start_position", "unknown"),
+    "Start unseen / unsure",
+  );
+  assert.equal(
+    optionLabel("auto_climb", "not_attempted"),
+    "Did not attempt a climb",
+  );
+  assert.equal(optionLabel("endgame", "failed"), "Attempted, but failed");
+  assert.equal(optionLabel("endgame", "L3"), "Reached Level 3");
+  assert.match(ratingLabel("driver", 1), /Struggled/);
+  assert.match(ratingLabel("defense", 5), /Very effective/);
+  assert.equal(initialData("match").driver, null);
+});

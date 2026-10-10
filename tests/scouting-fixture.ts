@@ -1,4 +1,5 @@
 import { expect, type Page, type TestInfo } from "@playwright/test";
+import type { EventMatch, Feed, Match } from "../src/competition/service";
 import {
   initialData,
   type Observation,
@@ -41,6 +42,8 @@ export async function setupScouting(
     role?: "mentor" | "student" | "readonly";
     observations?: Observation[];
     canManage?: boolean;
+    legacyFeed?: boolean;
+    feed?: Partial<Feed>;
   } = {},
 ) {
   const role = options.role || "mentor";
@@ -111,7 +114,7 @@ export async function setupScouting(
     links: [],
     areas: [],
   };
-  const match = {
+  const match: Match = {
     key: "2026test_qm17",
     label: "Q17",
     level: "qm",
@@ -128,7 +131,17 @@ export async function setupScouting(
     blueScore: null,
     winner: "",
   };
-  const feed = {
+  const otherMatch: EventMatch = {
+    ...match,
+    key: "2026test_qm4",
+    label: "Q4",
+    number: 4,
+    red: ["1001", "1002", "1003"],
+    blue: ["2001", "2002", "2003"],
+    alliance: null,
+    scheduled: Date.now() + 600000,
+  };
+  const feed: Feed = {
     eventId,
     configured: true,
     configVersion: 1,
@@ -136,11 +149,16 @@ export async function setupScouting(
     team: 4418,
     eventName: "Synthetic Regional",
     matches: [match],
+    ...(options.legacyFeed ? {} : { scoutingMatches: [otherMatch, match] }),
     tbaAt: Date.now(),
     tbaError: null,
     nexus: null,
     nexusAt: null,
     nexusError: "Synthetic feed",
+    ...(options.legacyFeed
+      ? {}
+      : { eventTeams: [], teamsAt: Date.now(), teamsError: null }),
+    ...options.feed,
   };
   const calls: Call[] = [],
     pageErrors: string[] = [];
@@ -277,6 +295,7 @@ export async function setupScouting(
     state,
     data,
     competition,
+    feed,
     calls,
     pageErrors,
     submissions: () =>
@@ -328,6 +347,36 @@ export const scoutTab = (page: Page, name: string | RegExp) =>
     .click();
 export const emitScoutingAuth = (page: Page, id: string | null) =>
   page.evaluate((id) => (window as any).__scoutingFixture.emitAuth(id), id);
+export async function refreshScoutingMatches(page: Page) {
+  const response = page.waitForResponse((response) =>
+    response.url().endsWith("/scouting-fixture/feed"),
+  );
+  await page
+    .getByRole("button", { name: "Refresh matches", exact: true })
+    .click();
+  await response;
+  await expect(
+    page.getByRole("button", { name: "Refresh matches", exact: true }),
+  ).toBeEnabled();
+}
+export async function refreshScoutingTeams(page: Page) {
+  // Team refresh must retrieve both the official directory and synced reports.
+  const responses = Promise.all([
+    page.waitForResponse((response) =>
+      response.url().endsWith("/scouting-fixture/feed"),
+    ),
+    page.waitForResponse((response) =>
+      response.url().endsWith("/scouting-fixture/rpc/pit_scouting_context"),
+    ),
+  ]);
+  await page
+    .getByRole("button", { name: "Refresh team data", exact: true })
+    .click();
+  await responses;
+  await expect(
+    page.getByRole("button", { name: "Refresh team data", exact: true }),
+  ).toBeEnabled();
+}
 export async function fillMatch(page: Page, team = "1619", match = "qm17") {
   await page
     .getByRole("button", { name: "New match report", exact: true })

@@ -1,16 +1,38 @@
-// Verified: TBA OpenAPI 3.26.0; Nexus OpenAPI 1.8.0. No credentials in normalized data.
-export type Match = {key:string;label:string;level:string;number:number;set:number;red:string[];blue:string[];alliance:'red'|'blue';scheduled:number|null;predicted:number|null;actual:number|null;completed:boolean;redScore:number|null;blueScore:number|null;winner:string};
+// Verified: TBA OpenAPI 3.27.0; Nexus OpenAPI 1.8.0. No credentials in normalized data.
+// An event match need not include our team. Only operational matches require its alliance.
+export type EventMatch = {key:string;label:string;level:string;number:number;set:number;red:string[];blue:string[];alliance:'red'|'blue'|null;scheduled:number|null;predicted:number|null;actual:number|null;completed:boolean;redScore:number|null;blueScore:number|null;winner:string};
+export type Match = EventMatch & {alliance:'red'|'blue'};
+export type EventTeam = {key:string;number:number;name:string|null};
 export type LiveMatch = {label:string;status:string;red:string[];blue:string[];queue:number|null;estimated:number|null;committed:number|null;replayOf:string|null};
 const time=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)&&v>0?v:null;
 const teams=(v:unknown)=>Array.isArray(v)?v.filter(x=>typeof x==='string').map(x=>x.replace(/^frc/,'')):[];
-export function parseMatches(raw:unknown,event:string,team:number):Match[]{
+// Team_Simple includes the public nickname and full name. Keep only the display
+// name and canonical identity, independently of reports or a published schedule.
+export function parseEventTeams(raw:unknown):EventTeam[]{
+ if(!Array.isArray(raw))throw new Error('Invalid TBA team response');
+ const text=(v:unknown)=>typeof v==='string'?v.replace(/[\u0000-\u001f\u007f-\u009f]/g,' ').replace(/\s+/g,' ').trim().slice(0,200).trim()||null:null;
+ const unique=new Map<number,EventTeam>();
+ for(const row of raw){
+  if(!row||typeof row!=='object'||Array.isArray(row)||!Number.isSafeInteger(row.team_number)||row.team_number<1||row.team_number>99999||row.key!==`frc${row.team_number}`)continue;
+  const name=text(row.nickname)||text(row.name),old=unique.get(row.team_number);
+  if(!old||(!old.name&&name))unique.set(row.team_number,{key:row.key,number:row.team_number,name});
+ }
+ if(raw.length&&!unique.size)throw new Error('Invalid TBA team response');
+ return [...unique.values()].sort((a,b)=>a.number-b.number);
+}
+export function parseEventMatches(raw:unknown,event:string,team?:number):EventMatch[]{
  if(!Array.isArray(raw))throw new Error('Invalid TBA match response');
- return raw.filter(m=>m?.event_key===event&&typeof m.key==='string'&&m.key.startsWith(event+'_')&&['qm','ef','qf','sf','f'].includes(m.comp_level)&&[...teams(m.alliances?.red?.team_keys),...teams(m.alliances?.blue?.team_keys)].includes(String(team))).map(m=>{
+ const teamKeys=(v:unknown)=>Array.isArray(v)&&v.every(k=>typeof k==='string'&&/^frc[1-9]\d*$/.test(k));
+ // The standard event endpoint excludes practice matches. Manual practice operations stay separate.
+ return raw.filter(m=>m?.event_key===event&&['qm','ef','qf','sf','f'].includes(m.comp_level)&&Number.isSafeInteger(m.match_number)&&m.match_number>0&&Number.isSafeInteger(m.set_number)&&m.set_number>0&&m.key===`${event}_${m.comp_level==='qm'?`qm${m.match_number}`:`${m.comp_level}${m.set_number}m${m.match_number}`}`&&teamKeys(m.alliances?.red?.team_keys)&&teamKeys(m.alliances?.blue?.team_keys)).map(m=>{
   const red=teams(m.alliances.red.team_keys),blue=teams(m.alliances.blue.team_keys);
   const score=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)&&v>=0?v:null;
   const redScore=score(m.alliances.red.score),blueScore=score(m.alliances.blue.score);
-  return {key:m.key,label:m.comp_level==='qm'?`Q${m.match_number}`:`${m.comp_level.toUpperCase()}${m.set_number}–${m.match_number}`,level:m.comp_level,number:m.match_number,set:m.set_number,red,blue,alliance:red.includes(String(team))?'red':'blue',scheduled:time(m.time)?m.time*1000:null,predicted:time(m.predicted_time)?m.predicted_time*1000:null,actual:time(m.actual_time)?m.actual_time*1000:null,completed:redScore!==null&&blueScore!==null,redScore,blueScore,winner:['red','blue'].includes(m.winning_alliance)?m.winning_alliance:''} as Match;
+  return {key:m.key,label:m.comp_level==='qm'?`Q${m.match_number}`:`${m.comp_level.toUpperCase()}${m.set_number}–${m.match_number}`,level:m.comp_level,number:m.match_number,set:m.set_number,red,blue,alliance:red.includes(String(team))?'red':blue.includes(String(team))?'blue':null,scheduled:time(m.time)?m.time*1000:null,predicted:time(m.predicted_time)?m.predicted_time*1000:null,actual:time(m.actual_time)?m.actual_time*1000:null,completed:redScore!==null&&blueScore!==null,redScore,blueScore,winner:['red','blue'].includes(m.winning_alliance)?m.winning_alliance:''} as EventMatch;
  }).sort((a,b)=>(['qm','ef','qf','sf','f'].indexOf(a.level)-['qm','ef','qf','sf','f'].indexOf(b.level))||a.set-b.set||a.number-b.number);
+}
+export function parseMatches(raw:unknown,event:string,team:number):Match[]{
+ return parseEventMatches(raw,event,team).filter((m):m is Match=>m.alliance!==null);
 }
 export function parseNexus(raw:any,event:string,team:number){
  if(!raw||raw.eventKey!==event||!Array.isArray(raw.matches)||!time(raw.dataAsOfTime))throw new Error('Invalid Nexus event response');

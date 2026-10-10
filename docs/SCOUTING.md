@@ -5,8 +5,8 @@ Scouting lives in **Competition Operations → Scouting** and uses the existing 
 ## Competition quick start
 
 1. Open the app and sign in while connected. Choose **Scouting** and verify the event.
-2. Choose **New match report**, enter the robot team and match, and confirm the alliance/station. The picker includes the existing 4418 TBA schedule and saved manual practices. To scout other matches, enter `qm17`, `sf1m2`, `f1m1`, `p1`, or a named `practice:warmup` key. All teams can be entered; this release does not download the entire event’s schedule.
-3. Use the AUTO and TELEOP fuel counters, then record climb, estimated accuracy, observed capabilities, ratings and notes. Leave anything unseen as **Not observed**. Fuel is observed/estimated fuel entering the hub, not official scored points: inactive hubs do not score fuel.
+2. Choose **New match report**, enter the robot team and match, and confirm the alliance/station. The picker loads the entire configured TBA event schedule with red/blue alliance team numbers, alongside saved manual practices. Pit preparation, readiness and battery/checklist workflows remain limited to 4418’s matches. To enter an unpublished match manually, use `qm17`, `sf1m2`, `f1m1`, `p1`, or a named `practice:warmup` key. Scouts choose the robot team separately; choosing a match never assigns 4418 or guesses an alliance. The schedule checks about every 30 seconds while visible, with a 60-second TBA cache; **Refresh matches** retries immediately but still respects that cache. Feed updates do not overwrite draft fields or submitted observations. Offline/failing feeds show a dated last-loaded snapshot.
+3. Use the AUTO and TELEOP fuel counters, then record climb, estimated accuracy, observed capabilities, ratings and notes. Leave anything unseen or not yet entered as the field’s unknown/unrated choice. Use **Set 0 fuel** only for an observed zero, **Couldn’t count** when no reliable fuel count is available, and distinguish **Did not attempt a climb** from **Attempted, but failed**. Driver/defense ratings include descriptive 1–5 anchors; unrated values remain excluded from averages. Fuel is observed/estimated fuel entering the hub, not official scored points: inactive hubs do not score fuel.
 4. Review the team and match, then choose **Submit report**. This first saves an immutable safety copy on the current device, then sends it immediately to the team database while connected. Wait for **Synced to the team database**. If offline, it automatically retries when you reconnect. **Sync reports** remains a manual retry option.
 5. Use **Teams** and **Compare** for synced evidence. Leadership can assign scouting coverage and manage **Picklist** rank, availability and notes. Use **New pit report** for team-reported capabilities, kept separate from match metrics.
 
@@ -25,6 +25,12 @@ A scout can submit one original report for a particular event, robot and match (
 - **Device caveat:** localStorage is not encrypted. Browser/site-data clearing, device loss, private browsing limitations, or storage quota errors can prevent recovery. Do not place student personal details or unrelated sensitive information in robot notes. A storage failure is shown and never reported as a successful save.
 - **Backup:** Device → Export device backup saves this account/event’s own drafts and outbox. Restore requires the same account, event and demo/live scope. Restored reports are queued for automatic idempotent confirmation when connected, even if another device had acknowledged them previously. This is IMPULSE’s format, not Lovat-compatible import or QR transfer.
 - **Multiple tabs:** per-record storage and immutable receipts protect against unrelated records clobbering one another. Draft edits check their revision; a conflicting edit is rejected rather than silently lost. Concurrent synchronization uses leases, and a late failed attempt cannot replace a confirmed acknowledgment.
+
+## Event team directory
+
+Teams lists the actual TBA event roster, including teams without a published match or any scouting observations. Numbers and names come from TBA; scouting performance metrics come only from synced team reports. Unscouted teams are labeled clearly and keep missing metrics blank. Search accepts team numbers or names. Report-only teams (including manually entered practice opponents) remain visible even when they are absent from the roster. Historical/unlinked scouting events never inherit the active event’s roster.
+
+The roster is fetched through the existing authenticated competition feed and has its own five-minute server cache. A failed refresh retains only the last same-event roster with an outdated warning; successful empty results clear roster entries without removing report teams. Refresh team data requests both the roster and synced reports. The usual 30-second visible-page poll continues, subject to provider cache lifetimes. No new credentials or database migration is needed.
 
 ## Evidence and statistics
 
@@ -57,8 +63,8 @@ The production release must verify the exact deployed commit/assets and inspect 
 
 ## Coverage and current boundaries
 
-Delivered core: match/pit scouting, phone-friendly counters, autosaved drafts, automatic reconnect outbox, safe retries, portable own-account backup, correction history, team notes/averages/comparison, report CSV, assignments/coverage, versioned shared picklist, and existing TBA/manual-match references.
+Delivered core: match/pit scouting, phone-friendly counters, autosaved drafts, automatic reconnect outbox, safe retries, portable own-account backup, correction history, team notes/averages/comparison, report CSV, assignments/coverage, versioned shared picklist, and all-event TBA/manual-match references.
 
-Not yet included: Lovat’s timestamped action/timeline recorder, full-event schedule download, alliance score simulation/predictions, weighted/drag-and-drop picklist ranking, photos, scouting shift scheduling/notifications, exact Lovat export compatibility, or offline app cold-start. QR transfer is intentionally omitted because the requested workflow is cloud-first. No parity claim is made for the other features.
+Not yet included: Lovat’s timestamped action/timeline recorder, alliance score simulation/predictions, weighted/drag-and-drop picklist ranking, photos, scouting shift scheduling/notifications, exact Lovat export compatibility, or offline app cold-start. QR transfer is intentionally omitted because the requested workflow is cloud-first. No parity claim is made for the other features.
 
 Reference workflow: [Lovat](https://lovat.app/), [official Lovat repository](https://github.com/HighlanderRobotics/lovat), and [2026 FIRST game manual](https://firstfrc.blob.core.windows.net/frc2026/Manual/2026GameManual.pdf). The reviewed Lovat monorepo did not have a blanket root/app license; one server manifest separately declares ISC. This implementation reuses no Lovat source or assets.

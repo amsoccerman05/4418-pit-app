@@ -18,10 +18,14 @@ export {
 } from "../../supabase/functions/competition-feed/external";
 export type {
   Match,
+  EventMatch,
+  EventTeam,
   LiveMatch,
 } from "../../supabase/functions/competition-feed/external";
 import type {
   Match,
+  EventMatch,
+  EventTeam,
   parseNexus,
 } from "../../supabase/functions/competition-feed/external";
 export type TemplateItem = {
@@ -102,6 +106,11 @@ export type Feed = {
   eventKey?: string;
   eventName?: string | null;
   matches: Match[];
+  // Whole-event scouting list; absent on older feed deployments.
+  scoutingMatches?: EventMatch[];
+  eventTeams?: EventTeam[];
+  teamsAt?: number | null;
+  teamsError?: string | null;
   standings?: Standings | null;
   standingsAt?: number | null;
   standingsError?: string | null;

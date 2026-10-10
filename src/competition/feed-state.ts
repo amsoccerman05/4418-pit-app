@@ -13,8 +13,19 @@ export function mergeFeed(previous: Feed | null, incoming: Feed): Feed {
     return incoming;
   return {
     ...incoming,
-    ...(incoming.tbaError && !incoming.matches?.length
-      ? { matches: previous.matches, tbaAt: previous.tbaAt }
+    // The two views share one TBA snapshot. Retain them together only when
+    // the failed response has no usable schedule; never mix timestamps/views.
+    ...(incoming.tbaError &&
+    !incoming.matches?.length &&
+    !incoming.scoutingMatches?.length
+      ? {
+          matches: previous.matches,
+          scoutingMatches: previous.scoutingMatches,
+          tbaAt: previous.tbaAt,
+        }
+      : {}),
+    ...(incoming.teamsError && !incoming.eventTeams?.length
+      ? { eventTeams: previous.eventTeams, teamsAt: previous.teamsAt }
       : {}),
     ...(incoming.standingsError && !incoming.standings && previous.standings
       ? {

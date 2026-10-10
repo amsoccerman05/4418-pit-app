@@ -316,3 +316,16 @@
     margin-top: 8px;
   }
 }
+
+.scout-team-name {
+  overflow-wrap: anywhere;
+  color: var(--suite-muted);
+  margin-top: 8px;
+}
+.scout-form-grid > div {
+  min-width: 0;
+}
+.scout-form-grid > div > small {
+  margin-top: 6px;
+  line-height: 1.5;
+}
