@@ -26,6 +26,16 @@ import {
   type Pick,
 } from "./model";
 import "./scouting.css";
+import {
+  driverStations,
+  driverStation,
+  stationLabel,
+  stationKey,
+  isStationAssignment,
+  stationTeam,
+  findStationMatch,
+  type DriverStation,
+} from "./stations";
 import { optionLabel, fieldHelp, ratingLabel } from "./labels";
 import { withEventTeams, type DirectorySummary } from "./directory";
 
@@ -133,7 +143,14 @@ function ScoutingEvent({
     [localError, setLocalError] = useState("");
   const reports = currentReports(s.context?.observations || []);
   const pending = s.outbox.filter((o) => o.status !== "synced");
-  const newDraft = (kind: Kind, source?: Observation) => {
+  const myStations = (s.context?.assignments || []).filter(
+    (a) => isStationAssignment(a) && a.assignee_id === profile.id,
+  );
+  const newDraft = (
+    kind: Kind,
+    source?: Observation,
+    assigned?: DriverStation,
+  ) => {
     setNotice("");
     setLocalError("");
     const p: ScoutingDraftPayload = {
@@ -142,7 +159,15 @@ function ScoutingEvent({
       kind,
       team_number: source?.team_number || null,
       match_key: source?.match_key || null,
-      data: source ? { ...source.data } : initialData(kind),
+      data: source
+        ? { ...source.data }
+        : {
+            ...initialData(kind),
+            ...(kind === "match"
+              ? (assigned ? driverStation(assigned) : null) ||
+                (myStations.length === 1 ? driverStation(myStations[0]) : null)
+              : null),
+          },
       supersedes_id: source?.id || null,
     };
     const saved = s.saveDraft(p);
@@ -323,6 +348,16 @@ function ScoutingEvent({
               New pit report
             </button>
           </div>
+          {!!myStations.length && (
+            <p className="scout-caveat">
+              Your driver {myStations.length === 1 ? "station" : "stations"}:{" "}
+              {myStations
+                .map((a) => stationLabel(driverStation(a)!))
+                .join(", ")}
+              . Follow the same station each match; select the match to load its
+              team.
+            </p>
+          )}
           {!s.canScout && (
             <p>
               View-only account. Active scouts can collect and submit
@@ -693,8 +728,10 @@ function ScoutingEvent({
         <section className="card">
           <h3>Scouting coverage</h3>
           <p>
-            Assign a robot and match to a scout. Completion means that assigned
-            scout has synced a report, not merely saved it on a phone.
+            Assign a driver station for this event: Red 1–3 or Blue 1–3. The
+            scout follows that station across matches. Each report still records
+            the actual match and team. One scout per station; edit a station to
+            reassign it.
           </p>
           {manager && active && (
             <AssignmentForm
@@ -702,6 +739,7 @@ function ScoutingEvent({
               initial={assignmentEdit}
               cancel={() => setAssignmentEdit(null)}
               profiles={data.profiles}
+              assignments={s.context?.assignments || []}
               disabled={!s.online || s.busy || !s.managementReady}
               save={async (p) => {
                 const ok = await s.manage("assignment", p);
@@ -711,44 +749,91 @@ function ScoutingEvent({
             />
           )}
           <div className="scout-record-list">
-            {(s.context?.assignments || []).map((a) => {
-              const complete = reports.some(
-                (o) =>
-                  o.kind === a.kind &&
-                  o.team_number === a.team_number &&
-                  o.match_key === a.match_key &&
-                  ((o as Observation & { scout_id?: string }).scout_id ||
-                    o.created_by) === a.assignee_id,
-              );
-              return (
-                <div className="scout-record" key={a.id}>
-                  <div>
-                    <strong>
-                      Team {a.team_number} ·{" "}
-                      {a.kind === "pit" ? "Pit" : a.match_key}
-                    </strong>
-                    <small>
-                      {data.profiles.find((p) => p.id === a.assignee_id)
-                        ?.display_name || "Unassigned"}{" "}
-                      · {complete ? "Submitted" : "Awaiting report"}
-                    </small>
-                  </div>
-                  <span
-                    className={"badge " + (complete ? "success" : "warning")}
-                  >
-                    {complete ? "Covered" : "Open"}
-                  </span>
-                  {manager && active && (
-                    <button
-                      disabled={!s.online || s.busy || !s.managementReady}
-                      onClick={() => setAssignmentEdit(a)}
+            {[...(s.context?.assignments || [])]
+              .sort(
+                (a, b) =>
+                  Number(isStationAssignment(b)) -
+                    Number(isStationAssignment(a)) ||
+                  String(a.alliance).localeCompare(String(b.alliance)) * -1 ||
+                  (a.station || 0) - (b.station || 0),
+              )
+              .map((a) => {
+                const station = isStationAssignment(a) ? a : null;
+                const submittedReports = reports.filter(
+                  (o) =>
+                    o.kind === a.kind &&
+                    (station
+                      ? o.data.alliance === a.alliance &&
+                        o.data.station === a.station
+                      : o.team_number === a.team_number &&
+                        o.match_key === a.match_key) &&
+                    ((o as Observation & { scout_id?: string }).scout_id ||
+                      o.created_by) === a.assignee_id,
+                );
+                const complete = submittedReports.length > 0;
+                return (
+                  <div className="scout-record" key={a.id}>
+                    <div>
+                      <strong>
+                        {station
+                          ? `${stationLabel(station)} · All matches`
+                          : `Team ${a.team_number} · ${a.kind === "pit" ? "Pit" : a.match_key}`}
+                      </strong>
+                      <small>
+                        {data.profiles.find((p) => p.id === a.assignee_id)
+                          ?.display_name || "Unassigned"}{" "}
+                        ·{" "}
+                        {station
+                          ? `${submittedReports.length} synced reports`
+                          : complete
+                            ? "Submitted"
+                            : "Awaiting report"}
+                      </small>
+                      {!station && a.kind === "match" && (
+                        <small>Earlier match-specific assignment</small>
+                      )}
+                    </div>
+                    <span
+                      className={
+                        "badge " +
+                        (station
+                          ? a.assignee_id
+                            ? "success"
+                            : "warning"
+                          : complete
+                            ? "success"
+                            : "warning")
+                      }
                     >
-                      Edit assignment
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+                      {station
+                        ? a.assignee_id
+                          ? "Ongoing"
+                          : "Open"
+                        : complete
+                          ? "Covered"
+                          : "Open"}
+                    </span>
+                    {station &&
+                      a.assignee_id === profile.id &&
+                      s.canScout &&
+                      active && (
+                        <button
+                          onClick={() => newDraft("match", undefined, station)}
+                        >
+                          Scout {stationLabel(station)}
+                        </button>
+                      )}
+                    {manager && active && (
+                      <button
+                        disabled={!s.online || s.busy || !s.managementReady}
+                        onClick={() => setAssignmentEdit(a)}
+                      >
+                        Edit assignment
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
           </div>
           {!s.context?.assignments.length && (
             <p>No assignments yet. Leadership can add one above.</p>
@@ -861,6 +946,36 @@ function ScoutForm({
   disabled: boolean;
 }) {
   const d = draft.data;
+  const following = driverStation(d);
+  const selectMatch = (key: string, name?: string) => {
+    const match = findStationMatch(schedule, normalizeMatchKey(key));
+    change({
+      ...draft,
+      match_key: normalizeMatchKey(key),
+      team_number: following
+        ? stationTeam(match, following)
+        : draft.team_number,
+      data: { ...d, match_label: name || match?.label || key },
+    });
+  };
+  const selectStationField = (key: "alliance" | "station", value: unknown) => {
+    const nextData = { ...d, [key]: value };
+    const nextStation = driverStation(nextData);
+    change({
+      ...draft,
+      data: nextData,
+      team_number: draft.supersedes_id
+        ? draft.team_number
+        : nextStation
+          ? (stationTeam(
+              findStationMatch(schedule, draft.match_key),
+              nextStation,
+            ) ?? (following ? null : draft.team_number))
+          : following
+            ? null
+            : draft.team_number,
+    });
+  };
   const set = (key: string, value: unknown) =>
     change({ ...draft, data: { ...d, [key]: value } });
   const select = (key: keyof typeof choices, title: string) => (
@@ -870,7 +985,11 @@ function ScoutForm({
         <select
           aria-describedby={fieldHelp[key] ? `scout-help-${key}` : undefined}
           value={String(d[key] ?? "unknown")}
-          onChange={(e) => set(key, e.target.value)}
+          onChange={(e) =>
+            key === "alliance"
+              ? selectStationField("alliance", e.target.value)
+              : set(key, e.target.value)
+          }
         >
           {choices[key].map((v) => (
             <option key={v} value={v}>
@@ -1039,15 +1158,10 @@ function ScoutForm({
                         (m) => m.match_key === e.target.value,
                       );
                       if (m || p)
-                        change({
-                          ...draft,
-                          match_key: normalizeMatchKey(e.target.value),
-                          data: {
-                            ...d,
-                            match_label:
-                              m?.label || p?.manual_label || e.target.value,
-                          },
-                        });
+                        selectMatch(
+                          e.target.value,
+                          m?.label || p?.manual_label || e.target.value,
+                        );
                     }}
                   >
                     <option value="">Manual entry / select…</option>
@@ -1074,8 +1188,9 @@ function ScoutForm({
                   {scheduleAt
                     ? ` Last snapshot ${new Date(scheduleAt).toLocaleTimeString()}.`
                     : " No TBA schedule has loaded yet."}{" "}
-                  Select the team you are watching separately. You can also
-                  enter a match below.
+                  {following
+                    ? `Following ${stationLabel(following)}. Selecting a match loads that station’s team when its full alliance lineup is available. Confirm the team before submitting.`
+                    : "Select the team you are watching separately, or choose an alliance and station. You can also enter a match below."}
                 </small>
                 <button
                   type="button"
@@ -1094,16 +1209,7 @@ function ScoutForm({
                   value={draft.match_key || ""}
                   maxLength={100}
                   placeholder="qm17 or p1"
-                  onChange={(e) =>
-                    change({
-                      ...draft,
-                      match_key: normalizeMatchKey(e.target.value),
-                      data: {
-                        ...d,
-                        match_label: d.match_label || e.target.value,
-                      },
-                    })
-                  }
+                  onChange={(e) => selectMatch(e.target.value)}
                 />
               </label>
               <label>
@@ -1121,7 +1227,7 @@ function ScoutForm({
                 <select
                   value={d.station === null ? "" : String(d.station)}
                   onChange={(e) =>
-                    set(
+                    selectStationField(
                       "station",
                       e.target.value ? Number(e.target.value) : null,
                     )
@@ -1136,6 +1242,17 @@ function ScoutForm({
             </>
           )}
         </div>
+        {draft.kind === "match" && following && (
+          <p className="scout-caveat" role="status">
+            Following {stationLabel(following)}.{" "}
+            {stationTeam(
+              findStationMatch(schedule, draft.match_key),
+              following,
+            ) === null
+              ? "No complete lineup is loaded for this match. Enter the team number explicitly after selecting the match."
+              : "A lineup is available for this station. Check the team number before submitting; manual corrections are allowed."}
+          </p>
+        )}
         {draft.kind === "match" ? (
           <>
             <h4>AUTO</h4>
@@ -1512,39 +1629,59 @@ function Picklist({
 }
 function AssignmentForm({
   profiles,
+  assignments,
   disabled,
   save,
   initial,
   cancel,
 }: {
   profiles: Profile[];
+  assignments: import("./model").Assignment[];
   disabled: boolean;
   save: (p: Record<string, unknown>) => Promise<boolean>;
   initial: import("./model").Assignment | null;
   cancel: () => void;
 }) {
   const [kind, setKind] = useState<Kind>(initial?.kind || "match");
+  const [assignee, setAssignee] = useState(initial?.assignee_id || "");
+  const legacy =
+    !!initial && initial.kind === "match" && !isStationAssignment(initial);
+  const otherStations = assignments.filter(
+    (a) =>
+      isStationAssignment(a) &&
+      a.id !== initial?.id &&
+      a.assignee_id === assignee,
+  );
   return (
     <form
       onSubmit={async (e) => {
         e.preventDefault();
         const form = e.currentTarget,
           f = new FormData(form);
+        const selectedStation = driverStations.find(
+          (station) => stationKey(station) === f.get("driver_station"),
+        );
         if (
           await save({
             id: initial?.id,
             kind,
-            team_number: Number(f.get("team")),
-            match_key:
-              kind === "match"
-                ? normalizeMatchKey(String(f.get("match")))
-                : null,
+            team_number:
+              kind === "match" && !legacy ? null : Number(f.get("team")),
+            match_key: legacy ? initial!.match_key : null,
+            ...(kind === "match" && !legacy
+              ? {
+                  alliance: selectedStation?.alliance,
+                  station: selectedStation?.station,
+                }
+              : {}),
             assignee_id: f.get("assignee") || null,
             version: initial?.version || 0,
             notes: initial?.notes || "",
           })
-        )
+        ) {
           form.reset();
+          if (!initial) setAssignee("");
+        }
       }}
     >
       <fieldset disabled={disabled}>
@@ -1560,29 +1697,63 @@ function AssignmentForm({
               <option value="pit">Pit</option>
             </select>
           </label>
-          <label>
-            Assigned team
-            <input
-              name="team"
-              readOnly={!!initial}
-              type="number"
-              min="1"
-              max="99999"
-              required
-              defaultValue={initial?.team_number || ""}
-            />
-          </label>
-          {kind === "match" && (
+          {kind === "match" && !legacy ? (
             <label>
-              Assigned match ID
-              <input
-                name="match"
-                readOnly={!!initial}
-                placeholder="qm17"
-                maxLength={100}
+              Driver station
+              <select
+                name="driver_station"
                 required
-                defaultValue={initial?.match_key || ""}
+                disabled={!!initial}
+                defaultValue={
+                  initial && isStationAssignment(initial)
+                    ? stationKey(initial)
+                    : ""
+                }
+              >
+                <option value="">Choose a station</option>
+                {driverStations.map((station) => (
+                  <option
+                    key={stationKey(station)}
+                    value={stationKey(station)}
+                    disabled={
+                      !initial &&
+                      assignments.some(
+                        (a) =>
+                          isStationAssignment(a) &&
+                          stationKey(a) === stationKey(station),
+                      )
+                    }
+                  >
+                    {stationLabel(station)}
+                  </option>
+                ))}
+              </select>
+              {initial && isStationAssignment(initial) && (
+                <input
+                  type="hidden"
+                  name="driver_station"
+                  value={stationKey(initial)}
+                />
+              )}
+            </label>
+          ) : (
+            <label>
+              Assigned team
+              <input
+                name="team"
+                readOnly={!!initial}
+                type="number"
+                min="1"
+                max="99999"
+                required
+                defaultValue={initial?.team_number || ""}
               />
+            </label>
+          )}
+          {legacy && (
+            <label>
+              Earlier assigned match ID
+              <input readOnly value={initial?.match_key || ""} />
             </label>
           )}
           <label>
@@ -1590,7 +1761,8 @@ function AssignmentForm({
             <select
               name="assignee"
               required={!initial}
-              defaultValue={initial?.assignee_id || ""}
+              value={assignee}
+              onChange={(e) => setAssignee(e.target.value)}
             >
               <option value="">
                 {initial ? "Unassigned" : "Choose teammate"}
@@ -1609,6 +1781,15 @@ function AssignmentForm({
             </select>
           </label>
         </div>
+        {!!assignee && !!otherStations.length && (
+          <p className="scout-caveat">
+            This scout already covers{" "}
+            {otherStations
+              .map((a) => stationLabel(driverStation(a)!))
+              .join(", ")}
+            . Assign another station only if they can cover both.
+          </p>
+        )}
         <div className="scout-toolbar">
           <button className="primary">
             {initial ? "Update assignment" : "Assign scout"}

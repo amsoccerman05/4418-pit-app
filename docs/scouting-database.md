@@ -1,6 +1,9 @@
 # Scouting database contract
 
-Migration: `supabase/migrations/20261010013034_competition_scouting.sql`.
+Migrations:
+
+- `supabase/migrations/20261010013034_competition_scouting.sql` establishes scouting.
+- `supabase/migrations/20261010142916_scouting_driver_station_assignments.sql` adds event-scoped driver station assignments.
 
 This is additive to the existing Pit Operations, Competition Operations and manual-practice migrations. It does not rewrite Inventory data, profiles, authorization roles, or existing public RPC definitions. The implementation is independent of Lovat and uses no Lovat code or license.
 
@@ -8,9 +11,19 @@ This is additive to the existing Pit Operations, Competition Operations and manu
 
 - `pit_scouting_context(event_id)` returns `can_scout`, `can_manage`, `observations`, `assignments`, and `picklist`. All arrays are scoped to the selected local Pit event. Observations include the entire correction chain; analytics must exclude IDs referenced by another observation's `supersedes_id`.
 - `pit_scouting_submit(p)` accepts `{id, event_id, kind, team_number, match_key, data, supersedes_id?}` and returns the submitted UUID. `kind` is `match` or `pit`; pit reports require a null/absent match key. The game schema version is `data.schema_version: 1`.
-- `pit_scouting_manage(action, p)` returns a row UUID. `action: assignment` accepts `{event_id, kind, team_number, match_key, assignee_id, notes?, version}`. Null `assignee_id` clears the assignment. `action: picklist` accepts `{event_id, team_number, rank, status, notes?, version}`. Picklist statuses are `available`, `picked`, or `avoid`; rank ties are sorted by team number. For either action, version 0 creates a row; existing rows require their current version and increment it atomically.
+- `pit_scouting_manage(action, p)` returns a row UUID. `action: assignment` supports the driver station and legacy targets below. Null `assignee_id` clears the assignment. `action: picklist` accepts `{event_id, team_number, rank, status, notes?, version}`. Picklist statuses are `available`, `picked`, or `avoid`; rank ties are sorted by team number. For either action, version 0 creates a row; existing rows require their current version and increment it atomically.
 
 Submitted observation rows include `created_by` (the actual submitting account), `created_at` (server time), and `scout_id` (the original scout, unchanged by corrections). Assignment/picklist rows have server-stamped `updated_by` and `updated_at`. Caller-supplied authorship/timestamps and other unknown top-level fields are rejected.
+
+## Assignment targets
+
+Driver station coverage is for the selected local Pit event, across its matches. It accepts `{event_id, kind: "match", alliance, station, assignee_id, notes?, version}`. `alliance` is exactly `red` or `blue`; `station` is a JSON whole number 1–3. `team_number` and `match_key` must be absent or null. An assignment to Red 1 does not mean qualification match 1, team 1, or a permanently assigned robot.
+
+There are six possible event slots: Red 1, Red 2, Red 3, Blue 1, Blue 2, and Blue 3. A unique `(event_id, kind, alliance, station)` index permits one row and one current assignee per station. Clearing an assignee keeps the row, notes and version history. Different stations may intentionally share the same scout; this is not a database uniqueness violation. Clients should warn about that choice. Station coverage does not populate report team numbers: each match's team still needs to be chosen or verified against its schedule.
+
+Existing match/team assignments continue to accept `{event_id, kind: "match", team_number, match_key, assignee_id, notes?, version}`. Pit assignments keep `{event_id, kind: "pit", team_number, match_key: null, assignee_id, notes?, version}`. Both use absent/null `alliance` and `station`. Existing match keys still normalize and validate with the original helper. Contradictory station and team/match targets are rejected, rather than silently discarding one target.
+
+The upgrade only adds nullable `alliance` and `station` columns, permits a null team for station targets, and replaces the target-shape check with an explicit legacy-or-station constraint. Legacy assignment IDs, target fields, notes, assignees, versions and timestamps are preserved; new fields are null. No historical match number is converted to a driver station. Existing audit JSON is untouched. New station changes append the same before/after audit events, including station identity. Public RPC signatures and invoker wrapper definitions stay unchanged. Context returns the new fields and orders station rows Red 1–3 then Blue 1–3, with legacy match/team and pit rows also retained.
 
 ## Schema 1
 
@@ -40,8 +53,8 @@ Public RPCs are invoker wrappers around checked private implementations. Every p
 
 ## Verification and deployment
 
-Run `node --test tests/scouting-db.test.mjs tests/competition-manual-db.test.mjs tests/database.test.mjs`. The disposable PGlite suite applies all existing migrations followed by the new migration. It checks production-style default grants, role/position revocation, null/type/range validation, exact retries, duplicate identity, append-only corrections, competing stale saves, event isolation, identity-rebinding protection and preservation of existing data/APIs.
+Run `node --test tests/scouting-stations-db.test.mjs tests/scouting-db.test.mjs tests/competition-manual-db.test.mjs tests/database.test.mjs`. The disposable PGlite suites apply the prerequisite migrations followed by the station migration. The station suite also seeds legacy assignments and audit records before the upgrade, then verifies their exact preservation alongside all public RPC definitions and grants. They check production-style default grants, role/position revocation, null/type/range validation, all six slots, intentional repeated scout assignments, target-shape constraints, exact retries, duplicate identity, append-only corrections, competing stale saves, clear/reassign audit trails, event isolation, identity-rebinding protection and preservation of existing data/APIs.
 
 PGlite queues queries within one embedded PostgreSQL instance; its competing-request tests verify conflict outcomes, not true multi-session lock scheduling. A staging PostgreSQL deployment should also exercise simultaneous client submissions and corrections. The migration includes database unique constraints, per-request advisory locks, shared event-identity locks and row locks for that purpose.
 
-The migration file was created with Supabase CLI 2.119.0. Local CLI advisors and migration-list commands could not connect because no local Supabase PostgreSQL server was running on port 54322. No production migration or data changes were performed during database implementation. Run advisors and normal staging/deployment checks against the authorized target before promotion.
+Both migration files were created with Supabase CLI 2.119.0. The station upgrade passed the original scouting regression suite and its own pre-upgrade/post-upgrade fixture suite. Local CLI advisors and migration-list commands could not connect because no local Supabase PostgreSQL server was running on port 54322. No production migration or data changes were performed during database implementation. Run advisors and normal staging/deployment checks against the authorized target before promotion.

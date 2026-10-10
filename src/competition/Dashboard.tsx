@@ -7,6 +7,7 @@ import type { Readiness } from "./readiness";
 import { canWork, issueOwner, type Data, type Profile } from "../model";
 import { liveFor, nextMatch, type Competition, type Context } from "./service";
 import { isManualMatch } from "./manual";
+import { MatchWinProbability } from "./MatchWinProbability";
 const at = (n: number | null) =>
   n
     ? new Date(n).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
@@ -206,6 +207,15 @@ export function CompetitionDashboard({
             </>
           ) : (
             <h2>No upcoming match published</h2>
+          )}
+          {next && (
+            <MatchWinProbability
+              feed={c.feed}
+              match={next}
+              eventKey={d.config?.tba_event_key}
+              now={c.tick}
+              unavailable={scheduleStale || !!c.feedError}
+            />
           )}
           {live &&
             (live.nowQueuing || live.matches.some((m) => !m.committed)) && (

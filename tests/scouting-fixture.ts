@@ -41,6 +41,7 @@ export async function setupScouting(
   options: {
     role?: "mentor" | "student" | "readonly";
     observations?: Observation[];
+    assignments?: ScoutingContext["assignments"];
     canManage?: boolean;
     legacyFeed?: boolean;
     feed?: Partial<Feed>;
@@ -51,7 +52,7 @@ export async function setupScouting(
     can_scout: role !== "readonly",
     can_manage: options.canManage ?? role === "mentor",
     observations: options.observations || [],
-    assignments: [],
+    assignments: options.assignments || [],
     picklist: [],
   };
   const profiles = [
@@ -254,7 +255,9 @@ export async function setupScouting(
               x.event_id === p.event_id &&
               x.team_number === p.team_number &&
               x.kind === p.kind &&
-              x.match_key === p.match_key,
+              x.match_key === p.match_key &&
+              (x.alliance ?? null) === (p.alliance ?? null) &&
+              (x.station ?? null) === (p.station ?? null),
           );
         if (existing)
           Object.assign(existing, p, { version: existing.version + 1 });
@@ -269,7 +272,9 @@ export async function setupScouting(
             x.event_id === p.event_id &&
             x.team_number === p.team_number &&
             x.kind === p.kind &&
-            x.match_key === p.match_key,
+            x.match_key === p.match_key &&
+            (x.alliance ?? null) === (p.alliance ?? null) &&
+            (x.station ?? null) === (p.station ?? null),
         )!.id;
       }
     } else throw new Error(`Unexpected fixture RPC: ${path}`);

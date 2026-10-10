@@ -15,6 +15,8 @@ import {
 } from "./storage";
 import { validateReport, type Payload, type ScoutingContext } from "./model";
 
+import { validAssignment } from "./stations";
+
 const message = (error: unknown) =>
   error instanceof Error
     ? error.message
@@ -50,14 +52,22 @@ function checkedContext(value: unknown, eventId: string): ScoutingContext {
       !record ||
       record.event_id !== eventId ||
       typeof record.id !== "string" ||
-      !uuid.test(record.id) ||
-      !Number.isInteger(record.team_number) ||
-      record.team_number < 1
+      !uuid.test(record.id)
     )
       throw new Error(
         "Scouting event changed or returned invalid records. Refresh to try again.",
       );
   }
+  for (const assignment of result.assignments)
+    if (!validAssignment(assignment))
+      throw new Error("Unexpected scouting assignment. Refresh to try again.");
+  for (const pick of result.picklist)
+    if (
+      !Number.isInteger(pick.team_number) ||
+      pick.team_number < 1 ||
+      pick.team_number > 99999
+    )
+      throw new Error("Unexpected scouting pick. Refresh to try again.");
   for (const report of result.observations) {
     validateReport(report);
     if (
@@ -423,7 +433,7 @@ export function useScouting(
     const job = begin();
     if (!job) return false;
     setWriteError(null);
-    // Management RPCs identify assignments/picks by event and team; id is a
+    // Management RPCs identify records by event and station or team target; id is a
     // reviewed-result check, not a supported request field.
     const { id: expectedId, ...fields } = payload;
     try {

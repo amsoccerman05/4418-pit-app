@@ -695,3 +695,56 @@ test("newly reviewed reports queued during another upload drain immediately afte
     await h.close();
   }
 });
+
+test("station-only context is accepted while mixed or malformed assignment targets are rejected", async () => {
+  const h = harness();
+  try {
+    await h.ready();
+    const valid = {
+      ...context(),
+      assignments: [
+        {
+          id: id(700),
+          event_id: "event-A",
+          kind: "match",
+          team_number: null,
+          match_key: null,
+          alliance: "blue",
+          station: 3,
+          assignee_id: id(100),
+          version: 1,
+        },
+      ],
+    };
+    let refresh = h.value.refresh();
+    h.reads.at(-1).resolve({ data: valid, error: null });
+    await refresh;
+    await h.settle();
+    assert.equal(h.value.context.assignments[0].station, 3);
+    for (const extra of [
+      { team_number: 4418 },
+      { match_key: "qm1" },
+      { station: "3" },
+      { kind: "pit" },
+      { version: 0 },
+    ]) {
+      refresh = h.value.refresh();
+      h.reads
+        .at(-1)
+        .resolve({
+          data: {
+            ...valid,
+            assignments: [{ ...valid.assignments[0], ...extra }],
+          },
+          error: null,
+        });
+      await refresh;
+      await h.settle();
+      assert.match(h.value.error, /Unexpected scouting assignment/);
+      assert.equal(h.value.managementReady, false);
+      assert.equal(h.value.context.assignments[0].team_number, null);
+    }
+  } finally {
+    await h.close();
+  }
+});

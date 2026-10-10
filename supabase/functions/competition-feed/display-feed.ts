@@ -1,6 +1,11 @@
 import { createCache } from "./cache.ts";
 import { parseEventWebcasts, type EventWebcast } from "./webcasts.ts";
-import { parseTeamEPAs, type TeamEPA } from "./statbotics.ts";
+import {
+  parseMatchPredictions,
+  type MatchPrediction,
+  parseTeamEPAs,
+  type TeamEPA,
+} from "./statbotics.ts";
 import {
   parseNexusBoard,
   parsePitAddresses,
@@ -70,7 +75,7 @@ export function createDisplayFeed(
       error: "Nexus not configured",
     });
     const nexusBase = `https://frc.nexus/api/v1/event/${encodeURIComponent(nexusEvent || "")}`;
-    const [info, epa, board, map, addresses] = await Promise.all([
+    const [info, epa, predictions, board, map, addresses] = await Promise.all([
       validated<{ name: string | null; webcasts: EventWebcast[] }>(
         `event:${event}`,
         cached(
@@ -100,6 +105,17 @@ export function createDisplayFeed(
         ),
         (raw) => parseTeamEPAs(raw, event),
         "Statbotics event EPA",
+      ),
+      validated<MatchPrediction[]>(
+        `predictions:${event}`,
+        cached(
+          `https://api.statbotics.io/v3/matches?event=${event}&limit=1000`,
+          null,
+          undefined,
+          60000,
+        ),
+        (raw) => parseMatchPredictions(raw, event),
+        "Statbotics match predictions",
       ),
       validated<NexusBoard>(
         `board:${nexusEvent}`,
@@ -144,6 +160,9 @@ export function createDisplayFeed(
       teamEPAs: epa.data ?? [],
       epaAt: epa.at,
       epaError: epa.error,
+      matchPredictions: predictions.data ?? [],
+      predictionsAt: predictions.at,
+      predictionsError: predictions.error,
       nexusBoard: board.data,
       nexusBoardAt: board.at,
       nexusBoardError: board.error,
