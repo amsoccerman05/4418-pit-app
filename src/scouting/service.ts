@@ -116,6 +116,7 @@ export function useScouting(
   const [revision, bump] = useState(0);
   const [clock, setClock] = useState(Date.now());
   const [readError, setReadError] = useState<ScopedError>(null);
+  const [reading, setReading] = useState<ReadRequest | null>(null);
   const [writeError, setWriteError] = useState<ScopedError>(null);
   const [uncertain, setUncertain] = useState<View | null>(null);
   const [working, setWorking] = useState<Operation | null>(null);
@@ -183,6 +184,7 @@ export function useScouting(
         reviewed,
       };
       inflight.current = request;
+      setReading(request);
       const cancel = () => request.controller.abort();
       scope.signal.addEventListener("abort", cancel, { once: true });
       const valid = () =>
@@ -216,7 +218,10 @@ export function useScouting(
           return false;
         } finally {
           scope.signal.removeEventListener("abort", cancel);
-          if (inflight.current === request) inflight.current = null;
+          if (inflight.current === request) {
+            inflight.current = null;
+            if (mounted.current) setReading(null);
+          }
         }
       })();
       return request.promise;
@@ -519,6 +524,12 @@ export function useScouting(
     outbox: local.outbox,
     context: demo && allowedLocal ? demoContext : context,
     updatedAt: fresh ? snapshot.at : null,
+    refreshing: reading?.view === view,
+    readError: expired
+      ? "Team scouting snapshot expired."
+      : readError?.view === view
+        ? readError.message
+        : "",
     error:
       (writeError?.view === view ? writeError.message : "") ||
       local.error ||

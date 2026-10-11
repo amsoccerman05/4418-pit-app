@@ -1,5 +1,6 @@
 import { expect, type Page, type TestInfo } from "@playwright/test";
 import type { EventMatch, Feed, Match } from "../src/competition/service";
+import type { Profile } from "../src/model";
 import {
   initialData,
   type Observation,
@@ -45,6 +46,9 @@ export async function setupScouting(
     canManage?: boolean;
     legacyFeed?: boolean;
     feed?: Partial<Feed>;
+    profiles?: Profile[];
+    contextGate?: Promise<void>;
+    contextError?: string;
   } = {},
 ) {
   const role = options.role || "mentor";
@@ -55,7 +59,7 @@ export async function setupScouting(
     assignments: options.assignments || [],
     picklist: [],
   };
-  const profiles = [
+  const profiles: Profile[] = [
     { id: actorId, display_name: "Fixture Scout A", role, active: true },
     {
       id: otherActorId,
@@ -64,6 +68,11 @@ export async function setupScouting(
       active: true,
     },
   ];
+  for (const profile of options.profiles || []) {
+    const index = profiles.findIndex((existing) => existing.id === profile.id);
+    if (index < 0) profiles.push(profile);
+    else profiles[index] = profile;
+  }
   const data: Record<string, any[]> = {
     profiles,
     pit_events: [
@@ -165,6 +174,8 @@ export async function setupScouting(
     pageErrors: string[] = [];
   let ambiguousNextSubmit = false,
     rejectedNextManage = false;
+  const failures = new Map<string, string>();
+  let contextError = options.contextError;
   const holds = new Map<
     string,
     { started: () => void; gate: Promise<void>; finished: () => void }[]
@@ -278,7 +289,18 @@ export async function setupScouting(
         )!.id;
       }
     } else throw new Error(`Unexpected fixture RPC: ${path}`);
+    const failure =
+      (path === "rpc/pit_scouting_context" && contextError) ||
+      failures.get(path);
+    if (failure) {
+      failures.delete(path);
+      result = null;
+      error = { message: failure };
+    }
     const response = structuredClone({ data: result, error });
+    // Keep all StrictMode initial reads behind the same gate until released.
+    if (path === "rpc/pit_scouting_context" && options.contextGate)
+      await options.contextGate;
     const hold = holds.get(path)?.shift();
     if (hold) {
       hold.started();
@@ -295,7 +317,10 @@ export async function setupScouting(
     page.getByRole("heading", { name: "Competition dashboard", exact: true }),
   ).toBeVisible();
   await navigateScouting(page);
-  await expect(page.locator(".scout-sync")).toContainText("Team data checked");
+  if (!options.contextGate && !options.contextError)
+    await expect(page.locator(".scout-sync")).toContainText(
+      "Team data checked",
+    );
   return {
     state,
     data,
@@ -314,6 +339,12 @@ export async function setupScouting(
     },
     rejectManage() {
       rejectedNextManage = true;
+    },
+    failNext(path: string, message: string) {
+      failures.set(path, message);
+    },
+    clearContextError() {
+      contextError = undefined;
     },
     holdNext(path: string) {
       let started!: () => void, release!: () => void, finished!: () => void;

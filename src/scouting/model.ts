@@ -10,7 +10,11 @@ export type Payload = {
   data: Record<string, unknown>;
   supersedes_id?: string | null;
 };
-export type Observation = Payload & { created_by: string; created_at: string };
+export type Observation = Payload & {
+  created_by: string;
+  created_at: string;
+  scout_id?: string;
+};
 export type Assignment = {
   id: string;
   event_id: string;

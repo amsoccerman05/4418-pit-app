@@ -329,3 +329,149 @@
   margin-top: 6px;
   line-height: 1.5;
 }
+
+/* Native modal keeps reports visible and focused, even above a long team grid. */
+dialog.scout-detail {
+  padding: 0;
+  width: min(860px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  color: var(--suite-text, #182534);
+}
+.scout-report-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  background: #fff;
+  border-bottom: 1px solid var(--suite-border);
+}
+.scout-report-header h2 {
+  margin: 4px 0 0;
+  font-size: 24px;
+}
+.scout-report-header > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.scout-report-header button {
+  flex-shrink: 0;
+}
+.scout-report-body {
+  padding: 8px 24px 24px;
+}
+.scout-report-filters {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+}
+.scouting .scout-history-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 500;
+}
+.scouting .scout-history-toggle input {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.scout-detail .scout-report {
+  padding: 24px 0;
+  overflow-wrap: anywhere;
+}
+.scout-detail .scout-report h3 {
+  font-size: 20px;
+}
+.scout-report-meta {
+  margin: 8px 0;
+  color: var(--suite-muted);
+  font-size: 14px;
+}
+.scout-correction-note {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #f0f4f8;
+  font-size: 13px;
+}
+.scout-report-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+.scout-report-metrics > div {
+  background: #f5f8fb;
+  padding: 12px;
+  border-radius: 7px;
+}
+.scout-detail dt {
+  color: var(--suite-muted);
+  font-size: 12px;
+}
+.scout-detail dd {
+  margin: 4px 0 0;
+  font-weight: 600;
+}
+.scout-report-notes h4 {
+  font-size: 13px;
+  margin: 16px 0 6px;
+}
+.scout-report-notes p {
+  margin: 0 0 16px;
+}
+.scout-full-observation {
+  border: 1px solid var(--suite-border);
+  border-radius: 7px;
+  padding: 12px;
+}
+.scout-full-observation summary {
+  min-height: 24px;
+}
+.scout-observation-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.scout-correct {
+  margin-top: 16px;
+}
+@media (max-width: 600px) {
+  dialog.scout-detail {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+  .scout-report-header {
+    padding: 16px;
+    align-items: start;
+    gap: 12px;
+  }
+  .scout-report-header h2 {
+    font-size: 20px;
+  }
+  .scout-report-header button {
+    max-width: 98px;
+  }
+  .scout-report-body {
+    padding: 8px 16px 20px;
+  }
+  .scout-report-filters {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .scout-report-metrics {
+    gap: 7px;
+  }
+  .scout-report-metrics > div {
+    padding: 9px;
+  }
+  .scout-report-metrics dd {
+    font-size: 13px;
+  }
+}

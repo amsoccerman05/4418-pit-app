@@ -1311,6 +1311,9 @@ test("scouting read-only account sees shared data without collection or manageme
   await expect(
     page.getByRole("button", { name: "Correct this report", exact: true }),
   ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Close reports", exact: true })
+    .click();
   await scoutTab(page, "Picklist");
   await expect(
     page.getByRole("button", { name: "Add team to picklist", exact: true }),
