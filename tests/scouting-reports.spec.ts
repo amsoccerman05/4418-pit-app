@@ -144,6 +144,12 @@ test("reports open immediately from the first card of a 32-team roster and resto
   await expect(
     firstDialog.getByRole("button", { name: "Close reports" }),
   ).toBeFocused();
+  const path = test.info().outputPath("reports-first-roster-card.png");
+  await page.screenshot({ path, animations: "disabled", caret: "hide" });
+  await test.info().attach("Reports opened from the first roster card", {
+    path,
+    contentType: "image/png",
+  });
   // The native modal must keep keyboard navigation out of the long roster behind it.
   for (const direction of ["Tab", "Shift+Tab"]) {
     for (let index = 0; index < 12; index++) {
@@ -155,12 +161,6 @@ test("reports open immediately from the first card of a 32-team roster and resto
       ).toBe(true);
     }
   }
-  const path = test.info().outputPath("reports-first-roster-card.png");
-  await page.screenshot({ path, animations: "disabled", caret: "hide" });
-  await test.info().attach("Reports opened from the first roster card", {
-    path,
-    contentType: "image/png",
-  });
   await page.keyboard.press("Escape");
   await expect(firstDialog).toHaveCount(0);
   await expect(firstButton).toBeFocused();
@@ -305,6 +305,25 @@ test("full match and pit details preserve zero, missing values, flags, notes, an
     "datetime",
     corrected.created_at,
   );
+  await dialog
+    .getByLabel("Search reports", { exact: true })
+    .fill("Reviewed drivetrain tally.");
+  await dialog.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  const detailPath = test.info().outputPath("reports-correction-details.png");
+  await page.screenshot({
+    path: detailPath,
+    animations: "disabled",
+    caret: "hide",
+  });
+  await test
+    .info()
+    .attach("Report correction details", {
+      path: detailPath,
+      contentType: "image/png",
+    });
+  await dialog.getByLabel("Search reports", { exact: true }).fill("");
   const interview = dialog
     .locator(".scout-report")
     .filter({ hasText: "Pit interview with mechanical team." });
@@ -596,7 +615,7 @@ test("correcting a report from the final roster card focuses a visible form abov
   await expect(heading).toBeInViewport();
   if (test.info().project.name === "phone") {
     const headingBox = await heading.boundingBox();
-    const barBox = await page.locator(".topbar").boundingBox();
+    const barBox = await page.locator(".suite-header").boundingBox();
     expect(headingBox).not.toBeNull();
     expect(barBox).not.toBeNull();
     expect(headingBox!.y).toBeGreaterThanOrEqual(barBox!.y + barBox!.height);

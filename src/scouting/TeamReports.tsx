@@ -79,6 +79,32 @@ export function TeamReports({
       ref={dialog}
       className="scout-detail"
       aria-labelledby={titleId}
+      onKeyDown={(event) => {
+        if (event.key !== "Tab") return;
+        // Native modal inertness protects the page behind us, but Chromium can
+        // move focus to browser chrome at a boundary. Keep Tab/Shift+Tab cycling
+        // through the currently visible, enabled report controls instead.
+        const controls = Array.from(
+          event.currentTarget.querySelectorAll<HTMLElement>(
+            "button, input, select, textarea, a[href], summary, [tabindex]",
+          ),
+        ).filter(
+          (control) =>
+            control.tabIndex >= 0 &&
+            !control.matches(":disabled") &&
+            control.getClientRects().length > 0,
+        );
+        const first = controls[0],
+          last = controls[controls.length - 1];
+        if (!first || !last) return;
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }}
       onCancel={(event) => {
         event.preventDefault();
         close();
@@ -139,6 +165,7 @@ export function TeamReports({
               <label>
                 Report type
                 <select
+                  aria-label="Report type"
                   value={kind}
                   onChange={(event) => setKind(event.target.value)}
                 >
