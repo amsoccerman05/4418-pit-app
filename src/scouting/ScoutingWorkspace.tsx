@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { TeamReports } from "./TeamReports";
 import { StatboticsComparison } from "../competition/StatboticsComparison";
 import "../competition/live-display.css";
 import type { Data, Profile } from "../model";
@@ -532,12 +533,27 @@ function ScoutingEvent({
             </section>
           )}
           {teamDetail !== null && (
-            <TeamDetail
-              value={summaries.find((x) => x.team === teamDetail)}
+            <TeamReports
+              key={teamDetail}
+              team={teamDetail}
+              name={summaries.find((x) => x.team === teamDetail)?.name}
+              eventName={
+                data.events.find((event) => event.id === eventId)?.name ||
+                "Scouting event"
+              }
+              observations={(s.context?.observations || []).filter(
+                (report) => report.team_number === teamDetail,
+              )}
+              profiles={data.profiles}
               profile={profile}
-              data={data}
               manager={manager}
               active={active}
+              loaded={!!s.context}
+              refreshing={s.refreshing}
+              online={s.online}
+              error={s.readError}
+              updatedAt={s.updatedAt}
+              refresh={() => void s.refresh()}
               close={() => setTeamDetail(null)}
               correct={(o) => {
                 newDraft(o.kind, o);
@@ -945,6 +961,13 @@ function ScoutForm({
   refreshingSchedule: boolean;
   disabled: boolean;
 }) {
+  const formTitle = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    // A correction can start from any row in a long team grid. Make the
+    // destination visible after the report window and its opener unmount.
+    formTitle.current?.focus({ preventScroll: true });
+    formTitle.current?.scrollIntoView({ block: "center" });
+  }, [draft.id]);
   const d = draft.data;
   const following = driverStation(d);
   const selectMatch = (key: string, name?: string) => {
@@ -1102,7 +1125,7 @@ function ScoutForm({
   return (
     <section className="card scout-form">
       <div className="scout-toolbar">
-        <h3>
+        <h3 ref={formTitle} tabIndex={-1}>
           {draft.supersedes_id
             ? "Correct report"
             : draft.kind === "match"
@@ -1411,73 +1434,13 @@ function TeamCard({
         {s.pit ? "Pit report available" : "No pit report"}
       </p>
       <div className="scout-toolbar">
-        <button onClick={detail}>Reports & notes</button>
+        <button type="button" aria-haspopup="dialog" onClick={detail}>
+          Reports & notes
+        </button>
         <button aria-pressed={selected} onClick={toggle}>
           {selected ? "Selected" : "Compare"}
         </button>
       </div>
-    </section>
-  );
-}
-function TeamDetail({
-  value,
-  profile,
-  data,
-  manager,
-  active,
-  close,
-  correct,
-}: {
-  value: Summary | undefined;
-  profile: Profile;
-  data: Data;
-  manager: boolean;
-  active: boolean;
-  close: () => void;
-  correct: (o: Observation) => void;
-}) {
-  if (!value) return null;
-  return (
-    <section className="card scout-detail">
-      <div className="scout-toolbar">
-        <h3>Team {value.team} · reports & notes</h3>
-        <button onClick={close}>Close reports</button>
-      </div>
-      {!value.observations.length && (
-        <p>Not scouted yet. Synced match and pit reports will appear here.</p>
-      )}
-      {value.observations
-        .slice()
-        .sort((a, b) => b.created_at.localeCompare(a.created_at))
-        .map((o) => (
-          <article key={o.id} className="scout-report">
-            <strong>
-              {o.kind === "pit"
-                ? "Pit interview"
-                : String(o.data.match_label || o.match_key)}
-            </strong>
-            <small>
-              {new Date(o.created_at).toLocaleString()} ·{" "}
-              {data.profiles.find((p) => p.id === o.created_by)?.display_name ||
-                "Team scout"}
-            </small>
-            <p>
-              {o.kind === "match"
-                ? `AUTO ${o.data.auto_fuel ?? "unobserved"} · TELEOP ${o.data.teleop_fuel ?? "unobserved"} fuel · ${label(String(o.data.endgame))}`
-                : `${label(String(o.data.drive))} · Capacity ${o.data.capacity ?? "unknown"} · Climb ${label(String(o.data.climb))}`}
-            </p>
-            <p>{String(o.data.auto_notes || "")}</p>
-            <p className="scout-notes">{String(o.data.notes || "No notes.")}</p>
-            {active &&
-              profile.active &&
-              ["student", "lead", "mentor", "admin"].includes(profile.role) &&
-              (manager ||
-                ((o as Observation & { scout_id?: string }).scout_id ||
-                  o.created_by) === profile.id) && (
-                <button onClick={() => correct(o)}>Correct this report</button>
-              )}
-          </article>
-        ))}
     </section>
   );
 }
