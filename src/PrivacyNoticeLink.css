@@ -1,0 +1,18 @@
+footer.privacy-notice-footer {
+  flex-wrap: wrap;
+}
+
+.privacy-notice-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  color: #006bb3;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.privacy-notice-link:focus-visible {
+  outline: 2px solid #006bb3;
+  outline-offset: 3px;
+}

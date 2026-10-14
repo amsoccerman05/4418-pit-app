@@ -98,6 +98,10 @@ tests/workflows.spec.ts  Browser acceptance and responsive checks
 .github/workflows/pages.yml
 ```
 
+## Privacy notice release review
+
+Before each release, follow the [privacy notice checklist](docs/PRIVACY-RELEASE-CHECKLIST.md) and keep the shared [Team 4418 privacy notice](https://team.frc4418.org/privacy.html) accurate.
+
 ## Checks
 
 ```sh

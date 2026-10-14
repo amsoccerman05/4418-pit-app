@@ -7,6 +7,7 @@ import type {PurchasingScope} from './purchasing/service';
 import {CompetitionWorkspace} from './competition/Workspace';
 import {useCompetition} from './competition/service';
 import {AuthSurface} from './AuthSurface';
+import { PrivacyNoticeLink } from './PrivacyNoticeLink';
 import { SuiteHeader } from './SuiteHeader';
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -1106,10 +1107,11 @@ function App() {
               ))}
             </section>
           )}
-          <footer>
+          <footer className="privacy-notice-footer">
             <span>
               4418 IMPULSE <span> / </span> Ready for the next match.
             </span>
+            <PrivacyNoticeLink />
             <span>{lastSync && `Last refreshed ${lastSync}`}</span>
           </footer>
         </main>
