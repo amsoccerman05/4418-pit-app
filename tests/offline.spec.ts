@@ -343,7 +343,7 @@ test("logging out clears the loaded snapshot even while an earlier read is unres
     page.getByText("Private crew member", { exact: true }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: "Team sign in", exact: true }),
+    page.getByRole("heading", { name: "Competition Operations sign in", exact: true }),
   ).toBeVisible();
 });
 
