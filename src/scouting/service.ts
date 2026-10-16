@@ -109,6 +109,7 @@ export function useScouting(
   const mounted = useRef(true);
   const denied = useRef<View | null>(null);
   const inflight = useRef<ReadRequest | null>(null);
+  const lastReadAttempt = useRef<{ view: View; at: number } | null>(null);
   const operation = useRef<Operation | null>(null);
   const drainRequested = useRef<View | null>(null);
   const automaticSync = useRef<(() => Promise<void>) | null>(null);
@@ -184,6 +185,7 @@ export function useScouting(
         reviewed,
       };
       inflight.current = request;
+      lastReadAttempt.current = { view, at: Date.now() };
       setReading(request);
       const cancel = () => request.controller.abort();
       scope.signal.addEventListener("abort", cancel, { once: true });
@@ -239,11 +241,16 @@ export function useScouting(
   useEffect(() => {
     void refresh(false);
     void automaticSync.current?.();
-    const tick = setInterval(() => {
+    // Coalesce focus/visibility/timer bursts without adding background traffic.
+    // Manual refresh always bypasses this freshness gate and joins an active read.
+    const refreshIfDue = () => {
       setClock(Date.now());
-      if (typeof document === "undefined" || !document.hidden)
-        void refresh(false);
-    }, 30_000);
+      if (document.hidden || offlineNow()) return;
+      const previous = lastReadAttempt.current;
+      if (previous?.view === view && Date.now() - previous.at < 30_000) return;
+      void refresh(false);
+    };
+    const tick = setInterval(refreshIfDue, 30_000);
     const onlineChanged = () => {
       setOnline(!offlineNow());
       setClock(Date.now());
@@ -259,6 +266,8 @@ export function useScouting(
       )
         bump((value) => value + 1);
     };
+    window.addEventListener("focus", refreshIfDue);
+    document.addEventListener("visibilitychange", refreshIfDue);
     window.addEventListener("online", onlineChanged);
     window.addEventListener("offline", onlineChanged);
     window.addEventListener("storage", changed);
@@ -268,6 +277,8 @@ export function useScouting(
         clearTimeout(interruptedRetry.current);
         interruptedRetry.current = null;
       }
+      window.removeEventListener("focus", refreshIfDue);
+      document.removeEventListener("visibilitychange", refreshIfDue);
       window.removeEventListener("online", onlineChanged);
       window.removeEventListener("offline", onlineChanged);
       window.removeEventListener("storage", changed);

@@ -27,6 +27,12 @@ A scout can submit one original report for a particular event, robot and match (
 - **Backup:** Device → Export device backup saves this account/event’s own drafts and outbox. Restore requires the same account, event and demo/live scope. Restored reports are queued for automatic idempotent confirmation when connected, even if another device had acknowledged them previously. This is IMPULSE’s format, not Lovat-compatible import or QR transfer.
 - **Multiple tabs:** per-record storage and immutable receipts protect against unrelated records clobbering one another. Draft edits check their revision; a conflicting edit is rejected rather than silently lost. Concurrent synchronization uses leases, and a late failed attempt cannot replace a confirmed acknowledgment.
 
+## Refresh shared scouting data without reloading
+
+Use **Refresh scouting data** above any scouting section to fetch teammates’ reports, assignments, and picklist in place. It works even with an empty upload queue or a view-only account. The workspace’s **Refresh data** button also refreshes scouting while that page is open. Neither action submits unfinished drafts or resets the report form, selected section, or filters.
+
+**Sync reports** sends only already-submitted reports in this device’s queue. Reading shared data and uploading the queue are separate actions. Visible scouting data also refreshes on returning to the tab when at least 30 seconds have passed since its last request. Focus, visibility, and the existing 30-second timer share one freshness gate and coalesce active requests; hidden/offline tabs do not poll scouting. Reconnection retains the existing reviewed-report retry behavior. No new subscription, realtime channel, or backend change is required.
+
 ## Event team directory
 
 Teams lists the actual TBA event roster, including teams without a published match or any scouting observations. Numbers and names come from TBA; scouting performance metrics come only from synced team reports. Unscouted teams are labeled clearly and keep missing metrics blank. Search accepts team numbers or names. Report-only teams (including manually entered practice opponents) remain visible even when they are absent from the roster. Historical/unlinked scouting events never inherit the active event’s roster.

@@ -47,6 +47,7 @@ type Props = {
   demo: boolean;
   scope: PitScope;
   onAccessFailure: () => void;
+  refreshVersion?: number;
 };
 const draftPayload = (d: ScoutingDraftPayload): ScoutingDraftPayload => ({
   id: d.id,
@@ -76,6 +77,7 @@ export function ScoutingWorkspace({
   demo,
   scope,
   onAccessFailure,
+  refreshVersion,
 }: Props) {
   const active = data.events.find((e) => e.status === "active");
   const [eventId, setEventId] = useState(
@@ -105,6 +107,7 @@ export function ScoutingWorkspace({
           demo={demo}
           scope={scope}
           onAccessFailure={onAccessFailure}
+          refreshVersion={refreshVersion}
           eventId={eventId}
           active={event.status === "active"}
         />
@@ -127,10 +130,14 @@ function ScoutingEvent({
   demo,
   scope,
   onAccessFailure,
+  refreshVersion = 0,
   eventId,
   active,
 }: Props & { eventId: string; active: boolean }) {
   const s = useScouting(profile, eventId, demo, scope, onAccessFailure);
+  useEffect(() => {
+    if (refreshVersion) void s.refresh();
+  }, [refreshVersion, s.refresh]);
   const [tab, setTab] = useState("capture"),
     [draft, setDraft] = useState<StoredScoutingDraft | null>(null),
     [notice, setNotice] = useState(""),
@@ -262,6 +269,12 @@ function ScoutingEvent({
                 ? `Team data checked ${new Date(s.updatedAt).toLocaleTimeString()}`
                 : "Team data has not loaded."}
           </small>
+          <button
+            disabled={s.refreshing || !s.online}
+            onClick={() => void s.refresh()}
+          >
+            {s.refreshing ? "Refreshing scouting…" : "Refresh scouting data"}
+          </button>
           <button
             className="primary"
             disabled={s.busy || !s.online || !pending.length || !s.canScout}

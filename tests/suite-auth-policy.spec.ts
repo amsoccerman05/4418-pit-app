@@ -35,6 +35,8 @@ async function setup(context: BrowserContext, baseURL: string) {
           let session = { access_token: 'local-policy-fixture',
             expires_at: Math.floor(Date.now() / 1000) + 3600,
             user: { id: 'local-policy-user' } };
+          window.fixtureError = false;
+          window.setFixtureSession = next => { session = next; };
           addEventListener('message', (event) => {
             if (event.source !== parent ||
                 !${JSON.stringify([hub, pit])}.includes(event.origin) ||
@@ -43,7 +45,7 @@ async function setup(context: BrowserContext, baseURL: string) {
             if (method !== 'getSession' && method !== 'signOut') return;
             if (method === 'signOut') session = null;
             event.source.postMessage({ protocol, id,
-              result: { data: { session }, error: null } }, event.origin);
+              result: { data: { session }, error: window.fixtureError ? {message: 'Temporary connection failure'} : null } }, event.origin);
             if (method === 'signOut') event.source.postMessage({ protocol,
               event: 'SIGNED_OUT', session: null }, event.origin);
           });
@@ -75,7 +77,10 @@ async function setup(context: BrowserContext, baseURL: string) {
               '<a href="${pit}/">Open Pit</a><button id="refresh">Refresh session</button>' +
               '<button id="signout">Sign out fixture</button>';
             const client = createSuiteClient('https://local-policy.supabase.invalid', 'local-public-key');
+            window.fixtureClient = client; window.authEvents = [];
             client.auth.onAuthStateChange((_event, session) => {
+              window.authEvents.push({event: _event, token: session?.access_token});
+              document.getElementById('session').dataset.token = session?.access_token || '';
               document.getElementById('session').textContent = session?.user.id || 'signed-out';
             });
             document.getElementById('refresh').onclick = async () => {
@@ -219,4 +224,46 @@ test("existing stream frames load while unrelated and lookalike origins remain b
       .toContainEqual({ directive: "frame-src", blocked: origin });
   }
   expect(unexpected).toEqual([]);
+});
+
+
+test("closing Hub preserves a valid session through the existing frame, without fabricated sign-out", async ({page,context,baseURL}) => {
+ const {unexpected}=await setup(context,baseURL!);
+ await page.goto(hub+'/');
+ await expect(page.locator('#session')).toHaveText('local-policy-user');
+ const opened=page.waitForEvent('popup');await page.getByRole('link',{name:'Open Pit'}).click();const popup=await opened;
+ await expect(popup.locator('#session')).toHaveText('local-policy-user');
+ await page.close();
+ await popup.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await expect(popup.locator('iframe')).toHaveCount(1);
+ await expect(popup.locator('#session')).toHaveText('local-policy-user');
+ expect(await popup.evaluate(()=>(window as any).authEvents.some((e:any)=>e.event==='SIGNED_OUT'))).toBe(false);
+ await popup.getByRole('button',{name:'Sign out fixture'}).click();
+ await expect(popup.locator('#session')).toHaveText('signed-out');
+ expect(unexpected).toEqual([]);
+});
+
+test("direct visits reconcile a missed refresh and confirmed revocation on resume", async ({page,context,baseURL}) => {
+ await setup(context,baseURL!);await page.goto(pit+'/');
+ await expect(page.locator('#session')).toHaveText('local-policy-user');
+ const broker=page.frames().find(f=>f.url()===hub+'/suite-auth.html')!;
+ await broker.evaluate(()=>(window as any).setFixtureSession({access_token:'refreshed-fixture-token',expires_at:Math.floor(Date.now()/1000)+7200,user:{id:'local-policy-user'}}));
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await expect(page.locator('#session')).toHaveAttribute('data-token','refreshed-fixture-token');
+ await broker.evaluate(()=>(window as any).fixtureError=true);
+ await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+ await page.waitForTimeout(100);
+ await expect(page.locator('#session')).toHaveText('local-policy-user');
+ await broker.evaluate(()=>{(window as any).fixtureError=false;(window as any).setFixtureSession(null);});
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await expect(page.locator('#session')).toHaveText('signed-out');
+});
+
+test("same-origin unrelated source cannot forge a broker auth event", async ({page,context,baseURL}) => {
+ await setup(context,baseURL!);await page.goto(hub+'/');
+ await expect(page.locator('#session')).toHaveText('local-policy-user');
+ await page.evaluate(()=>window.postMessage({protocol:'4418-suite-auth-v1',event:'SIGNED_OUT',session:null},location.origin));
+ await page.waitForTimeout(100);
+ await expect(page.locator('#session')).toHaveText('local-policy-user');
+ expect(await page.evaluate(()=>(window as any).authEvents.some((e:any)=>e.event==='SIGNED_OUT'))).toBe(false);
 });

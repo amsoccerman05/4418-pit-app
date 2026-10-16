@@ -188,6 +188,7 @@ function Dialog({
   );
 }
 function App() {
+  const [scoutingRefreshVersion, setScoutingRefreshVersion] = useState(0);
   const [demo, setDemo] = useState(false),
     [role, setRole] = useState<Role>("student"),
     [profile, setProfile] = useState<Profile | null>(null),
@@ -251,7 +252,7 @@ function App() {
       expiresAt.current=session?.expires_at ? session.expires_at*1000 : null;
       setSessionExpiresAt(expiresAt.current);
       const allowed=!!nextId&&(!expiresAt.current||expiresAt.current>Date.now());
-      if (authIdentity.current !== nextId || !allowed) {
+      if (authIdentity.current !== nextId || !allowed || !authAllowed.current) {
         request.current++;
         accessEpoch.current++;setSessionGeneration(accessEpoch.current);
         accountRequests.current.abort();accountRequests.current=new AbortController();
@@ -437,7 +438,7 @@ function App() {
     }
   };
   if (!authReady)return <AuthSurface/>;
-  if(!userId&&!demo){const localDemo=import.meta.env.DEV&&new URLSearchParams(location.search).has('demo');return <AuthSurface redirect={!!supabase&&!localDemo}>{localDemo?<button onClick={()=>setDemo(true)}>Explore local demo</button>:!supabase?<><p role="alert">Unable to connect securely.</p><a href="https://team.frc4418.org/">Team sign in</a></>:undefined}</AuthSurface>;}
+  if(!userId&&!demo){const localDemo=import.meta.env.DEV&&new URLSearchParams(location.search).has('demo');return <AuthSurface>{localDemo?<button onClick={()=>setDemo(true)}>Explore local demo</button>:!supabase?<><p role="alert">Unable to connect securely.</p><a href="https://team.frc4418.org/">Team sign in</a></>:<><h1>Competition Operations sign in</h1><Login/></>}</AuthSurface>;}
   if(!profile)return <><SuiteHeader app="Competition Operations" onSignOut={()=>void exit()}/><section className="login-card"><p role={error?'alert':'status'}>{error||'Loading your account…'}</p><button disabled={!demo&&!authAllowed.current} onClick={()=>void refresh()}>Retry</button><a href="https://team.frc4418.org/">Team sign in</a></section></>;
   const issue = data.issues.find(
     (i) => modal?.kind === "issue" && i.id === modal.id,
@@ -529,7 +530,7 @@ function App() {
         </div>
       </aside>
       <div className="app">
-        <div className="workspace-tools"><span>{!demo&&!online?'Offline':loading?'Refreshing pit data…':sync}</span><button className="icon-button" aria-label="Refresh data" onClick={()=>void refresh(true)}><RefreshCw size={17}/></button></div>
+        <div className="workspace-tools"><span>{!demo&&!online?'Offline':loading?'Refreshing pit data…':sync}</span><button className="icon-button" aria-label="Refresh data" onClick={()=>{void refresh(true);if(page==='scouting')setScoutingRefreshVersion(value=>value+1);}}><RefreshCw size={17}/></button></div>
         {import.meta.env.DEV && demo && (
           <div className="demo-banner">
             <strong>LOCAL DEMO</strong>
@@ -647,7 +648,7 @@ function App() {
               </span>
             )}
           </div>}
-          {page==='scouting'&&<ScoutingWorkspace key={`${profile.id}:${sessionGeneration}`} profile={profile} data={data} competition={competition} demo={demo} scope={{actorId:profile.id,signal:accountRequests.current.signal,isCurrent:accessCurrent}} onAccessFailure={invalidateAccess}/>}
+          {page==='scouting'&&<ScoutingWorkspace refreshVersion={scoutingRefreshVersion} key={`${profile.id}:${sessionGeneration}`} profile={profile} data={data} competition={competition} demo={demo} scope={{actorId:profile.id,signal:accountRequests.current.signal,isCurrent:accessCurrent}} onAccessFailure={invalidateAccess}/>}
           {!demo && ['dashboard','matches','checklists','admin'].includes(page) && <CompetitionWorkspace page={page} competition={competition} data={data} dataUpdatedAt={lastSyncAt} dataError={dataReadError} profile={profile} go={go} report={matchId=>setModal({kind:'report',matchId})} openIssue={id=>setModal({kind:'issue',id})} batteryAction={id=>setModal({kind:'battery',id})}/>}
           {demo && ['matches','checklists'].includes(page) && <section className="card"><p>Competition event feeds and shared checklists are available in the signed-in team workspace.</p></section>}
           {page === "dashboard" && (demo || !competition.context?.config && !competition.context?.matches.some(m=>m.source==='manual')) && (

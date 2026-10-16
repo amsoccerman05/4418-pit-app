@@ -179,7 +179,7 @@ function harness() {
       events.get(kind)?.delete(fn);
     },
   };
-  globalThis.document = { hidden: false };
+  globalThis.document = { hidden: false, addEventListener: window.addEventListener, removeEventListener: window.removeEventListener };
   globalThis.setInterval = (fn) => {
     const key = Symbol();
     intervals.set(key, fn);
@@ -747,4 +747,32 @@ test("station-only context is accepted while mixed or malformed assignment targe
   } finally {
     await h.close();
   }
+});
+
+test("focus, visibility and timer refreshes are throttled and preserve unfinished drafts", async () => {
+  const h = harness();
+  try {
+    await h.ready();
+    const draft = h.value.saveDraft(report(77));
+    await h.settle();
+    h.event("focus"); h.event("visibilitychange"); h.tick();
+    assert.equal(h.reads.length, 1, "fresh data does not generate more reads");
+    h.now += 30_001;
+    h.event("focus"); h.event("visibilitychange"); h.tick();
+    assert.equal(h.reads.length, 2, "simultaneous triggers coalesce");
+    const manual = h.value.refresh();
+    assert.equal(h.reads.length, 2, "manual refresh joins an in-flight request");
+    h.reads[1].resolve({ data: context("event-A", "teammate update"), error: null });
+    await manual; await h.settle();
+    assert.equal(h.value.context.observations[0].data.notes, "teammate update");
+    assert.equal(h.value.drafts[0].id, draft.id);
+    assert.equal(h.writes.length, 0, "refresh never submits an unfinished draft");
+    h.now += 30_001; document.hidden = true; h.tick(); h.event("focus");
+    assert.equal(h.reads.length, 2, "hidden tab does not read");
+    document.hidden = false; h.event("visibilitychange");
+    assert.equal(h.reads.length, 3);
+    h.reads[2].resolve({ data: context(), error: null }); await h.settle();
+    h.event("offline"); h.now += 30_001; h.event("focus"); h.tick();
+    assert.equal(h.reads.length, 3, "offline focus does not read");
+  } finally { await h.close(); }
 });
