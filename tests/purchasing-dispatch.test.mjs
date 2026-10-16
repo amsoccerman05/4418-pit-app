@@ -30,7 +30,8 @@ function loadSource(file,overrides={},cache=new Map()){
 }
 
 async function fixture(){
- const originals=new Map(['window','document','location','history','fetch'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
+ const originals=new Map(['window','document','location','history','fetch','setInterval'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
+ globalThis.setInterval=()=>0; // Polling is driven separately in suite-auth regressions.
  const listeners=new Map(),held=[],attempts=[],sent=[];
  let hold=false,brokerSession=session('actor-A'),fetchResponse=()=>Response.json(context),currentActor='actor-A',account=new AbortController();
  const frame={contentWindow:{postMessage(message){
@@ -97,7 +98,7 @@ test('account replacement, sign-out, and same-actor return cancel a second-wait 
  for(const next of ['actor-B',null,'round-trip']){
   const f=await fixture();try{
    const {pending}=await atSecondLookup(f);f.switchAccount(next==='round-trip'?'actor-B':next);if(next==='round-trip')f.switchAccount('actor-A');f.release();
-   await assert.rejects(pending,error=>/abort/i.test(error.message));assert.equal(f.sent.length,0);assert.equal(f.attempts.length,1);assert.equal(f.attempts[0].signal.aborted,true);
+   await assert.rejects(pending,error=>/abort|account changed/i.test(error.message));assert.equal(f.sent.length,0);assert.equal(f.attempts.length,next==='round-trip'?1:0);if(f.attempts.length)assert.equal(f.attempts[0].signal.aborted,true);
   }finally{f.close();}
  }
 });
@@ -113,7 +114,7 @@ test('unmount cancellation during the second broker wait reaches the installed S
 test('a first-lookup account mismatch never constructs a transport request',async()=>{
  const f=await fixture();try{
   f.hold();const pending=f.service.attachPurchase(payload,f.scope());void pending.catch(()=>{});await f.waitHeld();f.release(session('actor-B'));
-  await assert.rejects(pending,/account changed/);assert.equal(f.attempts.length,0);
+  await assert.rejects(pending,/account changed|view changed/);assert.equal(f.scope().actorId,'actor-B');assert.equal(f.attempts.length,0);
  }finally{f.close();}
 });
 

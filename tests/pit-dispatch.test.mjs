@@ -47,11 +47,12 @@ function loadSource(file, overrides = {}, cache = new Map()) {
 
 async function fixture() {
   const originals = new Map(
-    ["window", "document", "location", "history", "fetch"].map((key) => [
+    ["window", "document", "location", "history", "fetch", "setInterval"].map((key) => [
       key,
       Object.getOwnPropertyDescriptor(globalThis, key),
     ]),
   );
+  globalThis.setInterval = () => 0; // Polling is driven separately in suite-auth regressions.
   const listeners = new Map(),
     held = [],
     attempts = [],
@@ -265,8 +266,10 @@ test("pit account replacement, sign-out, and same-actor return cancel a held wri
       }
       await tick();
       assert.equal(f.sent.length, 0);
-      assert.equal(f.attempts.length, 1);
-      assert.equal(f.attempts[0].signal.aborted, true);
+      // A changed identity is rejected by token lookup before fetch; a
+      // round-trip to the same identity still reaches an already-aborted fetch.
+      assert.equal(f.attempts.length, next === "round-trip" ? 1 : 0);
+      if (f.attempts.length) assert.equal(f.attempts[0].signal.aborted, true);
     } finally {
       f.close();
     }
@@ -305,16 +308,19 @@ test("verified missing, expired, or changed pit sessions invalidate access befor
     const f = await fixture();
     try {
       f.hold();
-      const pending = f.service.scopedPitRpc(rpcName, payload, f.scope());
+      const scope = f.scope();
+      const pending = f.service.scopedPitRpc(rpcName, payload, scope);
       void pending.catch(() => {});
       await f.waitHeld();
       f.release(next);
       await assert.rejects(pending, (error) => {
-        assert.equal(
-          accessFailure(error),
-          true,
-          "Callers must clear the old private snapshot when broker access is lost",
-        );
+        if (!next || next.user.id !== "actor-A") {
+          assert.equal(scope.signal.aborted, true);
+          assert.equal(scope.isCurrent(), false);
+        } else {
+          assert.equal(accessFailure(error), true,
+            "Malformed or expired same-account tokens must explicitly invalidate access");
+        }
         return true;
       });
       assert.equal(f.attempts.length, 0);
