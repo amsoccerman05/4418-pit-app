@@ -9,7 +9,7 @@ export function seed(): Data {
   const now = new Date().toISOString();
   const data = emptyData();
   data.profiles = (
-    ["readonly", "student", "lead", "admin", "mentor"] as Role[]
+    ["readonly", "student", "lead", "admin_lead", "admin", "mentor"] as Role[]
   ).map(demoProfile);
   data.events = [
     {

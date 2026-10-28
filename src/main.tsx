@@ -51,6 +51,8 @@ import {
   unresolved,
   issueOwner,
   canWork,
+  batteryStatusOptions,
+  roleLabel,
   canManage,
   isAdmin,
   nextBattery,
@@ -196,6 +198,8 @@ function App() {
     [profile, setProfile] = useState<Profile | null>(null),
     [userId, setUserId] = useState<string | null>(null),
     [authReady, setAuthReady] = useState(!supabase);
+  const latestProfile = useRef(profile);
+  latestProfile.current = profile;
   const [data, setData] = useState<Data>(emptyData),
     [page, setPage] = useState<Page>("dashboard"),
     [modal, setModal] = useState<Modal>(null),
@@ -369,10 +373,10 @@ function App() {
     p: Record<string, unknown>,
     close = true,
   ) {
-    if (!profile || saving.current) return false;
+    if (!profile || !latestProfile.current || !canWork(latestProfile.current) || saving.current) return false;
     if(!demo&&(pitReadOnly||offlineNow()||!accessCurrent())){setError('Read-only. Refresh your connection before saving.');return false;}
     const savedModal=modalIdentity.current,savedHash=location.hash,signal=accountRequests.current.signal;
-    const current=()=>appLive.current&&!signal.aborted&&accessCurrent();
+    const current=()=>appLive.current&&!signal.aborted&&accessCurrent()&&!!latestProfile.current&&canWork(latestProfile.current);
     saving.current=true;setBusy(true);setError('');setNotice('');
     try {
       await mutate(demo, profile, action, p,{actorId:profile.id,signal,isCurrent:current});
@@ -414,7 +418,7 @@ function App() {
     const t = setTimeout(() => setNotice(""), 3500);
     return () => clearTimeout(t);
   }, [notice]);
-  const displayUnverified=pitReadOnly||(!demo&&(!competition.context||!!competition.error||competition.readOnly));
+  const displayUnverified=pitReadOnly||(!demo&&(!competition.context||!!competition.error||competition.dataReadOnly));
   const active = data.events.find((e) => e.status === "active");
   const currentIssues = data.issues.filter((i) => i.event_id === active?.id);
   const open = currentIssues.filter(unresolved),
@@ -534,7 +538,7 @@ function App() {
           </div>
           <div>
             <strong>{profile.display_name}</strong>
-            <small>{profile.role}</small>
+            <small>{roleLabel(profile.role)}</small>
           </div>
 
         </div>
@@ -552,8 +556,8 @@ function App() {
                 value={role}
                 onChange={(e) => setRole(e.target.value as Role)}
               >
-                {["readonly", "student", "lead", "admin", "mentor"].map((r) => (
-                  <option key={r}>{r}</option>
+                {["readonly", "student", "lead", "admin_lead", "admin", "mentor"].map((r) => (
+                  <option key={r} value={r}>{roleLabel(r as Role)}</option>
                 ))}
               </select>
             </label>
@@ -1894,6 +1898,12 @@ function BatteryDetail({
   useEffect(() => {
     setStatus(b.status);
   }, [b.status]);
+  const statusOptions = batteryStatusOptions(profile, b);
+  // A downgrade must not leave an invisible, forbidden transition selected.
+  // Keep all measurement fields; never dispatch a write from this effect.
+  useEffect(() => {
+    if (!statusOptions.includes(status)) setStatus(b.status);
+  }, [profile.role, profile.active, b.active, b.status, status]);
   const history = data.batteryEvents
     .filter((e) => e.battery_id === b.id)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -1910,10 +1920,12 @@ function BatteryDetail({
         )}
         {b.notes && <p>{b.notes}</p>}
       </div>
-      {canWork(profile) && b.active && (
+      {b.active && b.status === "RETIRED" && !isAdmin(profile) && <p>Only Mentors and Admins can restore or record activity for a retired battery.</p>}
+      {statusOptions.length > 0 && (
         <form
           onSubmit={async (e) => {
             e.preventDefault();
+            if (busy || !batteryStatusOptions(profile, b).includes(status)) return;
             if (
               await save(
                 "transition_battery",
@@ -1940,9 +1952,7 @@ function BatteryDetail({
               <Select
                 value={status}
                 onChange={(v) => setStatus(v as Battery["status"])}
-                options={
-                  b.status === "ON ROBOT" ? ["ON ROBOT"] : batteryStatuses
-                }
+                options={statusOptions}
               />
             </Field>
             <Field label="Match (optional)">
@@ -1981,11 +1991,12 @@ function BatteryDetail({
           </Field>
           <p className="form-help">
             Voltage is recorded for reference; it does not determine battery
-            health. A lead must release flagged batteries. Only admins and
-            mentors can retire batteries.
+            health. A Lead or Admin Lead must release flagged batteries. Only Admins and
+            Mentors can retire batteries.
+            {b.status === "FLAGGED" && !canManage(profile) && " You may record a measurement while this battery remains FLAGGED."}
           </p>
           <div className="form-actions">
-            <button className="primary" disabled={busy}>
+            <button className="primary" disabled={busy || !statusOptions.includes(status)}>
               Save battery activity
             </button>
           </div>

@@ -10,6 +10,7 @@ import {
 } from "../src/issue-recovery.ts";
 import {
   canManage,
+  canWork,
   issueOwner,
   batteryReference,
   issueStatuses,
@@ -78,6 +79,7 @@ function component() {
     useState,
     React,
     canManage,
+  canWork,
     issueOwner,
     batteryReference,
     issueStatuses,
@@ -258,7 +260,9 @@ async function saveFailure(error, { moved = false, expired = false } = {}) {
     states = {};
   let calls = 0;
   const names = {
-    profile: { id: "me" },
+    profile: { id: "me", role:"lead", active:true },
+    latestProfile: { current: { id:"me", role:"lead", active:true } },
+    canWork,
     saving: { current: false },
     demo: false,
     pitReadOnly: false,

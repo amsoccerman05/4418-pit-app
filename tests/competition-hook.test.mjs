@@ -457,3 +457,12 @@ test("competition completion callbacks do not survive a scope change during post
     await h.close();
   }
 });
+
+test('retained competition callback cannot dispatch after same-identity Readonly downgrade', async () => {
+ const h=harness();try {await h.ready();const retained=h.value.run;
+ h.args.profile={...h.args.profile,role:'readonly'};h.render();h.flush();await h.settle();
+ assert.equal(h.value.readOnly,true);assert.equal(h.value.dataReadOnly,false);assert.ok(h.value.context);
+ await assert.rejects(()=>retained('item',{id:'item',complete:true,version:1}),/Read-only/);
+ assert.equal(h.writes.length,0);
+ }finally{await h.close();}
+});

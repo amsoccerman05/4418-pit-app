@@ -141,3 +141,26 @@ There is no CNAME file: custom GitHub Actions deployments use the repository Pag
 The original Pit V1 excludes photos, inventory integration, QR codes and health scoring. Later competition/scouting modules add schedule feeds, scouting analytics, and a scouting-only offline outbox; safety-critical Pit writes remain online-only. Navigation is intentionally simple and does not deep-link individual records. Histories are fully fetched in paginated batches for the initial small team workload; introduce event-scoped queries and incremental history loading if volume grows. Existing user accounts are reused, but browser sessions on separate domains still require their own sign-in. Production configuration history is documented in the deployment notes.
 
 Recommended next small iteration: run a practice-match session with the pit crew, tune the status labels/actions from their feedback, then add compressed, authenticated issue photos in a separate Pit Storage bucket if needed.
+
+## Literal Admin Lead role adapter
+
+Apply Hub core `20261028160322_student_admin_lead_roles.sql` before the additive
+Pit migration `20261028160506_pit_admin_lead_role_adapter.sql`. No accounts or
+position assignments are converted. Admin Lead inherits Student/Lead issue,
+battery and scouting work, but is **not** Mentor/Admin: event/battery metadata
+administration and retirement remain staff-only. Competition/scouting management
+still requires the existing qualifying active position category. Read only never
+performs business writes, even with a retained position or callback.
+
+Battery forms show only permitted statuses and explain FLAGGED/retirement rules.
+On a role downgrade, only an invalid pending status resets to the saved status;
+measurement/notes drafts remain and no write happens automatically.
+
+The release check includes `tests/native/role-demotion-concurrency.mjs` against a
+fresh Unix-socket-only synthetic PostgreSQL cluster. It observes actual blocked
+sessions, commits authority loss, then requires denial with unchanged business
+and audit rows. This gate must pass; PGlite/unit tests do not prove concurrency.
+Run with `PIT_ROLE_PG_BIN=/path/to/installed/postgresql/bin`. No existing database
+URL, live account or production credentials are used. New role browser fixtures
+are local source/dev harnesses and fail closed on unexpected HTTP/WebSocket
+traffic; their captures are not a production-artifact walkthrough.

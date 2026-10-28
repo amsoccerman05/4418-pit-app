@@ -55,6 +55,7 @@ export async function mutate(
   p: Record<string, unknown>,
   scope?:PitScope,
 ): Promise<void> {
+  if (!canWork(profile)) throw new Error("View-only account.");
   if (!demo) {
     if(!scope)throw new Error('Pit account scope required.');
     const { error } = await scopedPitRpc(`pit_${action}`,{p},scope);

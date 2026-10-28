@@ -10,7 +10,7 @@ import {
 } from "../connection";
 import { supabase } from "../client";
 import { scopedPitRpc, type PitScope } from "../pit-rpc";
-import type { Profile } from "../model";
+import { canWork, type Profile } from "../model";
 export {
   liveFor,
   nextMatch,
@@ -187,6 +187,8 @@ export function useCompetition(
     [tick, setTick] = useState(Date.now()),
     [online, setOnline] = useState(!offlineNow()),
     [uncertain, setUncertain] = useState(false);
+  const latestProfile = useRef(profile);
+  latestProfile.current = profile;
   const currentScope = useRef(scope);
   currentScope.current = scope;
   const inflight = useRef<{
@@ -376,15 +378,17 @@ export function useCompetition(
         : null,
     context = scoped?.context || null,
     contextAt = scoped?.at || null;
-  const readOnly =
+  const dataReadOnly =
     !online ||
     pitReadOnly ||
     !!readError ||
     uncertain ||
     !context ||
     isStale(contextAt, tick, 90000);
+  const readOnly = !profile || !canWork(profile) || dataReadOnly;
   const run = async (action: string, p: Record<string, unknown>) => {
     if (
+      !latestProfile.current || !canWork(latestProfile.current) ||
       !accountSignal ||
       readOnly ||
       offlineNow() ||
@@ -400,7 +404,8 @@ export function useCompetition(
         actorId: profile!.id,
         signal: accountSignal,
         isCurrent: () =>
-          currentScope.current === scope && authorized.current?.() !== false,
+          currentScope.current === scope && authorized.current?.() !== false &&
+          !!latestProfile.current && canWork(latestProfile.current),
       });
       if (currentScope.current !== scope || authorized.current?.() === false)
         throw new Error("Account changed.");
@@ -449,6 +454,7 @@ export function useCompetition(
     busy,
     refreshing,
     readOnly,
+    dataReadOnly,
     online,
     refresh,
     run,

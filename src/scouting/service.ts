@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Profile } from "../model";
+import { canWork, type Profile } from "../model";
 import { scopedPitRpc, type PitScope } from "../pit-rpc";
 import {
   accessFailure,
@@ -24,9 +24,7 @@ const message = (error: unknown) =>
         (error as { message?: string } | null)?.message ||
           "Scouting request failed.",
       );
-const activeScout = (profile: Profile) =>
-  profile.active &&
-  ["student", "lead", "mentor", "admin"].includes(profile.role);
+const activeScout = canWork;
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -151,10 +149,10 @@ export function useScouting(
     !view.signal.aborted &&
     latest.current.scope.isCurrent();
   const mayScout = () => live() && activeScout(latest.current.profile);
-  const scoped = (signal = scope.signal): PitScope => ({
+  const scoped = (signal = scope.signal, canWrite?: () => boolean): PitScope => ({
     actorId: profile.id,
     signal,
-    isCurrent: live,
+    isCurrent: () => live() && (!canWrite || canWrite()),
   });
   const revoke = () => {
     denied.current = view;
@@ -392,7 +390,7 @@ export function useScouting(
           const { data, error } = await scopedPitRpc(
             "pit_scouting_submit",
             { p: payload },
-            scoped(),
+            scoped(undefined, mayScout),
           );
           if (error) {
             if (accessFailure(error) && live()) revoke();
@@ -432,6 +430,8 @@ export function useScouting(
     clock - snapshot.at <= PRIVATE_SNAPSHOT_MAX_AGE_MS &&
     clock >= snapshot.at - 60_000;
   const context = fresh ? snapshot.value : null;
+  const currentContext = useRef(context);
+  currentContext.current = context;
   const manage = async (
     action: string,
     payload: Record<string, unknown>,
@@ -439,7 +439,7 @@ export function useScouting(
     if (
       !live() ||
       !activeScout(latest.current.profile) ||
-      !context?.can_manage ||
+      !currentContext.current?.can_manage ||
       offlineNow() ||
       demo ||
       uncertain === view ||
@@ -456,7 +456,7 @@ export function useScouting(
       const { data, error } = await scopedPitRpc(
         "pit_scouting_manage",
         { action, p: { ...fields, event_id: eventId } },
-        scoped(),
+        scoped(undefined, () => mayScout() && !!currentContext.current?.can_manage),
       );
       if (error) throw error;
       if (
