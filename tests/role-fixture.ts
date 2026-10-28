@@ -41,7 +41,7 @@ export async function setupRole(page:Page,role:Role,{canManage=false,status='FLA
   });
  }});
  expect(f.data.profiles[0].role).toBe(role);
- await expect(page.locator('.sidebar small')).toContainText(role==='admin_lead'?'Admin Lead':role==='readonly'?'Read only':role);
+ await expect(page.locator('.sidebar .account small')).toHaveText(role==='admin_lead'?'Admin Lead':role==='readonly'?'Read only':role);
  return {...f,violations,assertIsolated:()=>expect(violations,'No unknown outbound HTTP/WebSocket traffic').toEqual([])};
 }
 export async function captureRole(page:Page,info:TestInfo,name:string){

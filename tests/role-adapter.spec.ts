@@ -10,8 +10,8 @@ for(const role of ['admin_lead','lead','student','readonly'] as Role[])test(`${r
 });
 test('Admin Lead still requires a qualifying assigned competition position',async({page},info)=>{
  const f=await setupRole(page,'admin_lead',{canManage:false});await navigate(page,'Matches');await expect(page.getByRole('button',{name:'Add practice match',exact:true})).toHaveCount(0);
- f.context.can_manage=true;await page.evaluate(()=>(window as any).__offlineFixture.emitRealtime('pit_events'));await expect(page.getByRole('button',{name:'Add practice match',exact:true})).toBeVisible();
- f.context.can_manage=false;await page.evaluate(()=>(window as any).__offlineFixture.emitRealtime('pit_events'));await expect(page.getByRole('button',{name:'Add practice match',exact:true})).toHaveCount(0);await captureRole(page,info,'assignment-revoked');expect(f.writes()).toHaveLength(0);f.assertIsolated();
+ f.context.can_manage=true;await page.getByRole('button',{name:'Refresh schedule',exact:true}).click();await expect(page.getByRole('button',{name:'Add practice match',exact:true})).toBeVisible();
+ f.context.can_manage=false;await page.getByRole('button',{name:'Refresh schedule',exact:true}).click();await expect(page.getByRole('button',{name:'Add practice match',exact:true})).toHaveCount(0);await captureRole(page,info,'assignment-revoked');expect(f.writes()).toHaveLength(0);f.assertIsolated();
 });
 test('Lead to Student resets forbidden FLAGGED release but preserves measurements without autosave',async({page},info)=>{
  const f=await setupRole(page,'lead');await navigate(page,'Batteries');await page.getByRole('button',{name:'Details & history',exact:true}).click();const d=page.getByRole('dialog');
