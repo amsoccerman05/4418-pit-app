@@ -2,8 +2,33 @@
 -- Explicit Admin Lead parity with Student/Lead, not a privileged role alias.
 -- No profile/assignment/data changes, new grants, or Mentor/Admin expansion.
 -- Hosted native run40725017478 reproduced seven post-lock stale-authority writes.
--- Marked blocks narrowly recheck current authority at those write boundaries.
+-- Run40728581857 additionally reproduced four later competition row waits.
+-- Marked blocks recheck current authority at these and equivalent branch write boundaries.
 begin;
+-- Atomic preconditions: never overwrite an unseen definition, grant or policy.
+select pg_advisory_xact_lock(4418);
+do $pit_role_guard$ begin
+ if (select pg_get_constraintdef(oid) from pg_constraint where conrelid=to_regclass('public.profiles') and conname='profiles_role_check' and contype='c' and convalidated) is distinct from 'CHECK ((role = ANY (ARRAY[''readonly''::text, ''student''::text, ''lead''::text, ''admin_lead''::text, ''admin''::text, ''mentor''::text])))' then raise exception 'Pit role adapter requires reviewed Hub literal-role CHECK';end if;
+ if not exists(select 1 from pg_proc where oid=to_regprocedure('public.team_my_positions()') and md5(prosrc)='3a7116cddaf8fadd8ab9cb4447420392' and prosecdef and provolatile='s' and proconfig=array['search_path=""']::text[]) then raise exception 'Pit role adapter requires reviewed Hub position eligibility';end if;
+ if not exists(select 1 from pg_proc where oid=to_regprocedure('public.pit_competition_manage(text,jsonb)') and md5(pg_get_functiondef(oid))='58f94cb28b933bf9b6d6b29bb43a0ae3' and proacl::text='{postgres=X/postgres,authenticated=X/postgres}') then raise exception 'Pit baseline function/ACL drift: public.pit_competition_manage(text,jsonb)';end if;
+ if not exists(select 1 from pg_proc where oid=to_regprocedure('pit_private.competition_manager()') and md5(pg_get_functiondef(oid))='ce7e98bf0228e3c5254260b639339eca' and proacl::text='{postgres=X/postgres}') then raise exception 'Pit baseline function/ACL drift: pit_private.competition_manager()';end if;
+ if not exists(select 1 from pg_proc where oid=to_regprocedure('pit_private.scouting_context(uuid)') and md5(pg_get_functiondef(oid))='f4d562d71b9d25188ce59c4edfa196d1' and proacl::text='{postgres=X/postgres,authenticated=X/postgres}') then raise exception 'Pit baseline function/ACL drift: pit_private.scouting_context(uuid)';end if;
+ if not exists(select 1 from pg_proc where oid=to_regprocedure('pit_private.scouting_manage(text,jsonb)') and md5(pg_get_functiondef(oid))='8694bbdb6c7fb6d314b0b780e43853f3' and proacl::text='{postgres=X/postgres,authenticated=X/postgres}') then raise exception 'Pit baseline function/ACL drift: pit_private.scouting_manage(text,jsonb)';end if;
+ if not exists(select 1 from pg_proc where oid=to_regprocedure('pit_private.scouting_submit(jsonb)') and md5(pg_get_functiondef(oid))='fe2c148f6c617ac2ef57dbad36dec2fb' and proacl::text='{postgres=X/postgres,authenticated=X/postgres}') then raise exception 'Pit baseline function/ACL drift: pit_private.scouting_submit(jsonb)';end if;
+ if not exists(select 1 from pg_proc where oid=to_regprocedure('public.pit_report_issue(jsonb)') and md5(pg_get_functiondef(oid))='5b61ef7dc316576368bbfae95c247cd7' and proacl::text='{postgres=X/postgres,authenticated=X/postgres}') then raise exception 'Pit baseline function/ACL drift: public.pit_report_issue(jsonb)';end if;
+ if not exists(select 1 from pg_proc where oid=to_regprocedure('public.pit_transition_battery(jsonb)') and md5(pg_get_functiondef(oid))='2ac906f1d98f38d15ad7db6e15c0469c' and proacl::text='{postgres=X/postgres,authenticated=X/postgres}') then raise exception 'Pit baseline function/ACL drift: public.pit_transition_battery(jsonb)';end if;
+ if not exists(select 1 from pg_proc where oid=to_regprocedure('public.pit_update_issue(jsonb)') and md5(pg_get_functiondef(oid))='5051b6a2ff3dfa559cffbd6a52b1edd1' and proacl::text='{postgres=X/postgres,authenticated=X/postgres}') then raise exception 'Pit baseline function/ACL drift: public.pit_update_issue(jsonb)';end if;
+ if (select to_jsonb(p) from pg_policies p where schemaname='public' and tablename='pit_batteries' and policyname='pit_member_read') is distinct from '{"cmd":"SELECT","qual":"(( SELECT pit_private.\"current_role\"() AS \"current_role\") = ANY (ARRAY[''readonly''::text, ''student''::text, ''lead''::text, ''admin''::text, ''mentor''::text]))","roles":["authenticated"],"tablename":"pit_batteries","permissive":"PERMISSIVE","policyname":"pit_member_read","schemaname":"public","with_check":null}'::jsonb then raise exception 'Pit baseline policy drift: pit_batteries.pit_member_read';end if;
+ if (select to_jsonb(p) from pg_policies p where schemaname='public' and tablename='pit_battery_events' and policyname='pit_member_read') is distinct from '{"cmd":"SELECT","qual":"(( SELECT pit_private.\"current_role\"() AS \"current_role\") = ANY (ARRAY[''readonly''::text, ''student''::text, ''lead''::text, ''admin''::text, ''mentor''::text]))","roles":["authenticated"],"tablename":"pit_battery_events","permissive":"PERMISSIVE","policyname":"pit_member_read","schemaname":"public","with_check":null}'::jsonb then raise exception 'Pit baseline policy drift: pit_battery_events.pit_member_read';end if;
+ if (select to_jsonb(p) from pg_policies p where schemaname='public' and tablename='pit_events' and policyname='pit_member_read') is distinct from '{"cmd":"SELECT","qual":"(( SELECT pit_private.\"current_role\"() AS \"current_role\") = ANY (ARRAY[''readonly''::text, ''student''::text, ''lead''::text, ''admin''::text, ''mentor''::text]))","roles":["authenticated"],"tablename":"pit_events","permissive":"PERMISSIVE","policyname":"pit_member_read","schemaname":"public","with_check":null}'::jsonb then raise exception 'Pit baseline policy drift: pit_events.pit_member_read';end if;
+ if (select to_jsonb(p) from pg_policies p where schemaname='public' and tablename='pit_issue_events' and policyname='pit_member_read') is distinct from '{"cmd":"SELECT","qual":"(( SELECT pit_private.\"current_role\"() AS \"current_role\") = ANY (ARRAY[''readonly''::text, ''student''::text, ''lead''::text, ''admin''::text, ''mentor''::text]))","roles":["authenticated"],"tablename":"pit_issue_events","permissive":"PERMISSIVE","policyname":"pit_member_read","schemaname":"public","with_check":null}'::jsonb then raise exception 'Pit baseline policy drift: pit_issue_events.pit_member_read';end if;
+ if (select to_jsonb(p) from pg_policies p where schemaname='public' and tablename='pit_issues' and policyname='pit_member_read') is distinct from '{"cmd":"SELECT","qual":"(( SELECT pit_private.\"current_role\"() AS \"current_role\") = ANY (ARRAY[''readonly''::text, ''student''::text, ''lead''::text, ''admin''::text, ''mentor''::text]))","roles":["authenticated"],"tablename":"pit_issues","permissive":"PERMISSIVE","policyname":"pit_member_read","schemaname":"public","with_check":null}'::jsonb then raise exception 'Pit baseline policy drift: pit_issues.pit_member_read';end if;
+ if (select to_jsonb(p) from pg_policies p where schemaname='public' and tablename='pit_manual_match_events' and policyname='competition_read') is distinct from '{"cmd":"SELECT","qual":"(( SELECT pit_private.\"current_role\"() AS \"current_role\") = ANY (ARRAY[''readonly''::text, ''student''::text, ''lead''::text, ''mentor''::text, ''admin''::text]))","roles":["authenticated"],"tablename":"pit_manual_match_events","permissive":"PERMISSIVE","policyname":"competition_read","schemaname":"public","with_check":null}'::jsonb then raise exception 'Pit baseline policy drift: pit_manual_match_events.competition_read';end if;
+ if (select to_jsonb(p) from pg_policies p where schemaname='public' and tablename='pit_scouting_assignments' and policyname='scouting_read') is distinct from '{"cmd":"SELECT","qual":"(( SELECT pit_private.\"current_role\"() AS \"current_role\") = ANY (ARRAY[''readonly''::text, ''student''::text, ''lead''::text, ''mentor''::text, ''admin''::text]))","roles":["authenticated"],"tablename":"pit_scouting_assignments","permissive":"PERMISSIVE","policyname":"scouting_read","schemaname":"public","with_check":null}'::jsonb then raise exception 'Pit baseline policy drift: pit_scouting_assignments.scouting_read';end if;
+ if (select to_jsonb(p) from pg_policies p where schemaname='public' and tablename='pit_scouting_management_events' and policyname='scouting_read') is distinct from '{"cmd":"SELECT","qual":"(( SELECT pit_private.\"current_role\"() AS \"current_role\") = ANY (ARRAY[''readonly''::text, ''student''::text, ''lead''::text, ''mentor''::text, ''admin''::text]))","roles":["authenticated"],"tablename":"pit_scouting_management_events","permissive":"PERMISSIVE","policyname":"scouting_read","schemaname":"public","with_check":null}'::jsonb then raise exception 'Pit baseline policy drift: pit_scouting_management_events.scouting_read';end if;
+ if (select to_jsonb(p) from pg_policies p where schemaname='public' and tablename='pit_scouting_observations' and policyname='scouting_read') is distinct from '{"cmd":"SELECT","qual":"(( SELECT pit_private.\"current_role\"() AS \"current_role\") = ANY (ARRAY[''readonly''::text, ''student''::text, ''lead''::text, ''mentor''::text, ''admin''::text]))","roles":["authenticated"],"tablename":"pit_scouting_observations","permissive":"PERMISSIVE","policyname":"scouting_read","schemaname":"public","with_check":null}'::jsonb then raise exception 'Pit baseline policy drift: pit_scouting_observations.scouting_read';end if;
+ if (select to_jsonb(p) from pg_policies p where schemaname='public' and tablename='pit_scouting_picklist' and policyname='scouting_read') is distinct from '{"cmd":"SELECT","qual":"(( SELECT pit_private.\"current_role\"() AS \"current_role\") = ANY (ARRAY[''readonly''::text, ''student''::text, ''lead''::text, ''mentor''::text, ''admin''::text]))","roles":["authenticated"],"tablename":"pit_scouting_picklist","permissive":"PERMISSIVE","policyname":"scouting_read","schemaname":"public","with_check":null}'::jsonb then raise exception 'Pit baseline policy drift: pit_scouting_picklist.scouting_read';end if;
+end $pit_role_guard$;
 CREATE OR REPLACE FUNCTION public.pit_competition_manage(action text, p jsonb)
  RETURNS uuid
  LANGUAGE plpgsql
@@ -26,8 +51,29 @@ begin
    if nullif(item->>'area_id','') is not null and not exists(select 1 from public.areas where id=(item->>'area_id')::uuid and active) then raise exception 'Choose an active area';end if;
   end loop;
   if rid is null then
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if pit_private.current_role() not in ('mentor','admin') then
+  perform 1 from public.team_member_positions mp join public.team_positions tp on tp.key=mp.position_key and tp.active
+   where mp.user_id=auth.uid() and mp.revoked_at is null and tp.category in ('Program','Functional Leads','Other Leadership') for share of mp,tp;
+ end if;
+ if not pit_private.competition_manager() then raise exception 'Active competition leadership required' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
    insert into public.pit_checklist_templates(name,description,kind,items,updated_by) values(trim(p->>'name'),coalesce(p->>'description',''),p->>'kind',p->'items',auth.uid()) returning id into rid;
   else
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ perform 1 from public.pit_checklist_templates where id=rid for update;
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if pit_private.current_role() not in ('mentor','admin') then
+  perform 1 from public.team_member_positions mp join public.team_positions tp on tp.key=mp.position_key and tp.active
+   where mp.user_id=auth.uid() and mp.revoked_at is null and tp.category in ('Program','Functional Leads','Other Leadership') for share of mp,tp;
+ end if;
+ if not pit_private.competition_manager() then raise exception 'Active competition leadership required' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
    update public.pit_checklist_templates set name=trim(p->>'name'),description=coalesce(p->>'description',''),kind=p->>'kind',items=p->'items',active=(p->>'active')::boolean,version=version+1,updated_by=auth.uid(),updated_at=clock_timestamp() where id=rid and version=(p->>'version')::int;
    if not found then raise exception 'Template changed. Refresh before saving';end if;
   end if;return rid;
@@ -51,9 +97,29 @@ begin
   if found then
    if c.version is distinct from (p->>'version')::int then raise exception 'Configuration changed. Refresh before saving';end if;
    if (c.tba_event_key is distinct from p->>'tba_event_key' or c.team_number is distinct from (p->>'team_number')::int) and exists(select 1 from public.pit_match_ops where event_id=eid and source='tba') then raise exception 'This event already has match operations. Use a new event for another event/team';end if;
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if pit_private.current_role() not in ('mentor','admin') then
+  perform 1 from public.team_member_positions mp join public.team_positions tp on tp.key=mp.position_key and tp.active
+   where mp.user_id=auth.uid() and mp.revoked_at is null and tp.category in ('Program','Functional Leads','Other Leadership') for share of mp,tp;
+ end if;
+ if not pit_private.competition_manager() then raise exception 'Active competition leadership required' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
    update public.pit_event_config set team_number=(p->>'team_number')::int,tba_event_key=p->>'tba_event_key',nexus_event_key=nullif(p->>'nexus_event_key',''),version=version+1,updated_by=auth.uid(),updated_at=clock_timestamp() where event_id=eid;
   else
    if coalesce((p->>'version')::int,0)<>0 then raise exception 'Configuration changed';end if;
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if pit_private.current_role() not in ('mentor','admin') then
+  perform 1 from public.team_member_positions mp join public.team_positions tp on tp.key=mp.position_key and tp.active
+   where mp.user_id=auth.uid() and mp.revoked_at is null and tp.category in ('Program','Functional Leads','Other Leadership') for share of mp,tp;
+ end if;
+ if not pit_private.competition_manager() then raise exception 'Active competition leadership required' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
    insert into public.pit_event_config(event_id,team_number,tba_event_key,nexus_event_key,updated_by) values(eid,(p->>'team_number')::int,p->>'tba_event_key',nullif(p->>'nexus_event_key',''),auth.uid());
   end if;return eid;
  elsif action='manual_match' then
@@ -80,6 +146,16 @@ begin
      and lower(regexp_replace(manual_label,'\s+',' ','g'))=lower(regexp_replace(manual_name,'\s+',' ','g'))) then
     raise exception 'A practice with this label already exists in this event';
    end if;
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if pit_private.current_role() not in ('mentor','admin') then
+  perform 1 from public.team_member_positions mp join public.team_positions tp on tp.key=mp.position_key and tp.active
+   where mp.user_id=auth.uid() and mp.revoked_at is null and tp.category in ('Program','Functional Leads','Other Leadership') for share of mp,tp;
+ end if;
+ if not pit_private.competition_manager() then raise exception 'Active competition leadership required' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
    insert into public.pit_match_ops(id,event_id,match_key,source,manual_label,scheduled_at,note,updated_by)
      values(rid,eid,'manual:'||rid::text,'manual',manual_name,manual_time,manual_note,auth.uid()) returning to_jsonb(pit_match_ops) into after_match;
    insert into public.pit_manual_match_events(event_id,match_id,action,after_state,performed_by)
@@ -93,6 +169,16 @@ begin
     and lower(regexp_replace(manual_label,'\s+',' ','g'))=lower(regexp_replace(manual_name,'\s+',' ','g'))) then
    raise exception 'A practice with this label already exists in this event';
   end if;
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if pit_private.current_role() not in ('mentor','admin') then
+  perform 1 from public.team_member_positions mp join public.team_positions tp on tp.key=mp.position_key and tp.active
+   where mp.user_id=auth.uid() and mp.revoked_at is null and tp.category in ('Program','Functional Leads','Other Leadership') for share of mp,tp;
+ end if;
+ if not pit_private.competition_manager() then raise exception 'Active competition leadership required' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
   update public.pit_match_ops set manual_label=manual_name,scheduled_at=manual_time,
     version=version+1,updated_by=auth.uid(),updated_at=clock_timestamp() where id=mid returning to_jsonb(pit_match_ops) into after_match;
   insert into public.pit_manual_match_events(event_id,match_id,action,before_state,after_state,performed_by)
@@ -106,6 +192,16 @@ begin
    if m.finished_at is not null then raise exception 'Practice already finished';end if;
    -- Finishing records only the local lifecycle. It does not invent a score,
    -- complete checklist work, or install/remove/cool the assigned battery.
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if pit_private.current_role() not in ('mentor','admin') then
+  perform 1 from public.team_member_positions mp join public.team_positions tp on tp.key=mp.position_key and tp.active
+   where mp.user_id=auth.uid() and mp.revoked_at is null and tp.category in ('Program','Functional Leads','Other Leadership') for share of mp,tp;
+ end if;
+ if not pit_private.competition_manager() then raise exception 'Active competition leadership required' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
    update public.pit_match_ops set finished_at=clock_timestamp(),finished_by=auth.uid(),
      version=version+1,updated_by=auth.uid(),updated_at=clock_timestamp() where id=mid returning to_jsonb(pit_match_ops) into after_match;
    manual_action:='finished';
@@ -117,6 +213,16 @@ begin
      and lower(regexp_replace(manual_label,'\s+',' ','g'))=lower(regexp_replace(m.manual_label,'\s+',' ','g'))) then
     raise exception 'A practice with this label already exists in this event';
    end if;
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if pit_private.current_role() not in ('mentor','admin') then
+  perform 1 from public.team_member_positions mp join public.team_positions tp on tp.key=mp.position_key and tp.active
+   where mp.user_id=auth.uid() and mp.revoked_at is null and tp.category in ('Program','Functional Leads','Other Leadership') for share of mp,tp;
+ end if;
+ if not pit_private.competition_manager() then raise exception 'Active competition leadership required' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
    update public.pit_match_ops set archived_at=case when archive_target then clock_timestamp() end,
      archived_by=case when archive_target then auth.uid() end,version=version+1,updated_by=auth.uid(),updated_at=clock_timestamp()
      where id=mid returning to_jsonb(pit_match_ops) into after_match;
@@ -130,12 +236,32 @@ begin
   if m.source='manual' and m.archived_at is not null then raise exception 'Restore this practice before editing';end if;
   if mid is null then
    if p->>'match_key' is null or p->>'match_key' !~ ('^'||c.tba_event_key||'_(qm[0-9]+|(ef|qf|sf|f)[0-9]+m[0-9]+)$') then raise exception 'Match key must belong to this event';end if;
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if pit_private.current_role() not in ('mentor','admin') then
+  perform 1 from public.team_member_positions mp join public.team_positions tp on tp.key=mp.position_key and tp.active
+   where mp.user_id=auth.uid() and mp.revoked_at is null and tp.category in ('Program','Functional Leads','Other Leadership') for share of mp,tp;
+ end if;
+ if not pit_private.competition_manager() then raise exception 'Active competition leadership required' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
    insert into public.pit_match_ops(event_id,match_key,updated_by) values(eid,p->>'match_key',auth.uid()) on conflict(event_id,match_key) do nothing;
    select * into m from public.pit_match_ops where event_id=eid and match_key=p->>'match_key';return m.id;
   end if;
   if m.version is distinct from (p->>'version')::int then raise exception 'Match operations changed. Refresh before saving';end if;
   bid:=nullif(p->>'battery_id','')::uuid;
   if bid is not null and not exists(select 1 from public.pit_batteries where id=bid and active and status<>'RETIRED') then raise exception 'Choose an active battery';end if;
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if pit_private.current_role() not in ('mentor','admin') then
+  perform 1 from public.team_member_positions mp join public.team_positions tp on tp.key=mp.position_key and tp.active
+   where mp.user_id=auth.uid() and mp.revoked_at is null and tp.category in ('Program','Functional Leads','Other Leadership') for share of mp,tp;
+ end if;
+ if not pit_private.competition_manager() then raise exception 'Active competition leadership required' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
   update public.pit_match_ops set battery_id=bid,note=coalesce(p->>'note',''),version=version+1,updated_by=auth.uid(),updated_at=clock_timestamp() where id=mid;
   if bid is distinct from m.battery_id then
    if m.battery_id is not null then insert into public.pit_battery_events(battery_id,event_id,event_type,match_number,notes,performed_by) values(m.battery_id,eid,'metadata_updated',case when m.source='manual' then 'Manual: '||m.manual_label else m.match_key end,'Match assignment removed',auth.uid());end if;
@@ -160,6 +286,11 @@ begin
    if t.kind='pre' and m.finished_at is not null then raise exception 'Practice is finished. Start a post-match inspection';end if;
    if t.kind='post' and m.finished_at is null then raise exception 'Finish this practice before starting a post-match inspection';end if;
   end if;
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
   insert into public.pit_checklist_runs(id,event_id,match_id,template_id,template_version,name,kind,started_by) values(rid,eid,mid,t.id,t.version,t.name,t.kind,auth.uid());
   for item in select value from jsonb_array_elements(t.items) loop
    insert into public.pit_checklist_run_items(run_id,text,display_order,required,blocking,area_id) values(rid,trim(item->>'text'),idx,(item->>'required')::boolean,(item->>'blocking')::boolean,nullif(item->>'area_id','')::uuid);idx:=idx+1;
@@ -173,6 +304,12 @@ begin
   end if;
   select * into issue from public.pit_issues where id=new_id and event_id=eid for update;if not found then raise exception 'Issue belongs to a different event';end if;
   if exists(select 1 from public.pit_issue_matches where issue_id=new_id and match_id<>mid) then raise exception 'Issue already associated with another match';end if;
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if action='link_issue' then perform pit_private.require_role(array['lead','admin_lead','mentor','admin']);end if;
+ -- END CURRENT AUTHORITY RECHECK
   insert into public.pit_issue_matches(issue_id,match_id,linked_by) values(new_id,mid,auth.uid()) on conflict(issue_id) do nothing;
   if found then insert into public.pit_issue_events(issue_id,performed_by,changes) values(new_id,auth.uid(),jsonb_build_object('competition_match',jsonb_build_object('from',null,'to',m.match_key)));end if;return new_id;
  else raise exception 'Unknown competition action';end if;

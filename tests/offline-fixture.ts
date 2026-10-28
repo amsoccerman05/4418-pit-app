@@ -15,8 +15,8 @@ type HeldRequest = {
 };
 
 /** In-memory test server. Every response is captured when its request starts. */
-export async function setupOffline(page: Page, options: {role?: string; canManage?: boolean; beforeOpen?: (state: {data: Record<string, any[]>; context: any}) => Promise<void>} = {}) {
-  const now = Date.now();
+export async function setupOffline(page: Page, options: {now?: number; role?: string; canManage?: boolean; beforeOpen?: (state: {data: Record<string, any[]>; context: any}) => Promise<void>} = {}) {
+  const now = options.now ?? Date.now();
   const profile = {
     id: "person",
     display_name: "Private crew member",

@@ -57,3 +57,28 @@ test('literal Admin Lead adapter preserves ACLs/data and exact narrower boundari
  });
  }finally{await db.close();}
 });
+
+test('adapter atomically refuses missing prerequisite and unseen function, ACL, security or policy drift',async()=>{
+ const db=new PGlite();
+ try{
+  await install(q=>db.exec(q),{includeAdapter:false});
+  const functionName='public.pit_update_issue(jsonb)';
+  const baseline=(await db.query(`select pg_get_functiondef('${functionName}'::regprocedure) def`)).rows[0].def;
+  const helper=(await db.query(`select pg_get_functiondef('public.team_my_positions()'::regprocedure) def`)).rows[0].def;
+  const catalog=async()=> (await db.query(`select jsonb_build_object('functions',(select jsonb_agg(jsonb_build_array(oid::regprocedure::text,pg_get_functiondef(oid),proacl::text) order by oid) from pg_proc where pronamespace in ('public'::regnamespace,'pit_private'::regnamespace)),'policies',(select jsonb_agg(to_jsonb(p) order by tablename,policyname) from pg_policies p where schemaname='public')) state`)).rows[0].state;
+  for(const [alter,restore,reason] of [
+   ["alter table profiles drop constraint profiles_role_check;", "alter table profiles add constraint profiles_role_check check(role in ('readonly','student','lead','admin_lead','admin','mentor'));", /literal-role CHECK/],
+   [helper.replace("'admin_lead',",''),helper,/position eligibility/],
+   [baseline.replace('begin','begin\n -- synthetic unexpected drift'),baseline,/function\/ACL drift/],
+   [`alter function ${functionName} security invoker;`,baseline,/function\/ACL drift/],
+   [`grant execute on function ${functionName} to anon;`,`revoke execute on function ${functionName} from anon;`,/function\/ACL drift/],
+   ['alter policy pit_member_read on pit_issues using(true);',`alter policy pit_member_read on pit_issues using((select pit_private.current_role())=any(array['readonly','student','lead','admin','mentor']));`,/policy drift/],
+  ]){
+   await db.exec(alter);const before=await catalog();
+   await assert.rejects(()=>db.exec(migration(adapter)),reason);
+   await db.exec('rollback;');assert.deepEqual(await catalog(),before,'failed migration must not partially modify definitions or grants');
+   await db.exec(restore);
+  }
+  await db.exec(migration(adapter));
+ }finally{await db.close();}
+});

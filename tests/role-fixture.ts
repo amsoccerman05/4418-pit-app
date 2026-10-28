@@ -6,8 +6,9 @@ export type Role='admin_lead'|'lead'|'student'|'readonly';
 export async function setupRole(page:Page,role:Role,{canManage=false,status='FLAGGED'}:{canManage?:boolean;status?:string}={}){
  if(process.env.HANDOFF_LIVE)throw Error('Live mode is forbidden for synthetic role tests');
  const violations:string[]=[];
- await page.clock.setFixedTime(new Date('2026-10-28T12:00:00Z'));
- const f=await setupOffline(page,{role,canManage,beforeOpen:async({data,context})=>{
+ const now=Date.parse('2026-10-28T12:00:00Z');
+ await page.clock.setFixedTime(new Date(now));
+ const f=await setupOffline(page,{now,role,canManage,beforeOpen:async({data,context})=>{
   data.pit_batteries[0].status=status;context.manual_matches_enabled=true;
   const reads=new Set(['profiles','pit_events','pit_issues','pit_batteries','pit_battery_events','pit_issue_events'].map(t=>'table/'+t));
   const writes=new Set(['rpc/pit_transition_battery','rpc/pit_update_issue','rpc/pit_report_issue','rpc/pit_competition_manage','rpc/pit_scouting_submit','rpc/pit_scouting_manage']);

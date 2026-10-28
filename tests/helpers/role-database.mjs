@@ -1,5 +1,6 @@
 // Disposable synthetic Pit-only fixture. Hub owns the shared role CHECK/positions
-// migration; this harness models its literal profile/position contract, not its SQL.
+// migration; this harness installs its exact narrow CHECK/helper prerequisite,
+// not the complete shared Auth/core migration (which is tested by Hub).
 import {readFileSync} from 'node:fs';
 export const id=n=>`00000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 export const literal=x=>`'${String(x).replaceAll("'","''")}'`;
@@ -15,7 +16,7 @@ create table public.profiles(id uuid primary key,display_name text,role text,act
 create table public.areas(id uuid primary key,name text,active boolean);
 create table public.team_positions(key text primary key,category text,active boolean);
 create table public.team_member_positions(user_id uuid,position_key text,revoked_at timestamptz);
-insert into public.profiles values ${[[1,'mentor',true],[2,'admin_lead',true],[3,'lead',true],[4,'student',true],[5,'readonly',true],[6,'admin_lead',false],[7,'admin',true],[8,'admin_lead',true],[9,'guest',true]].map(([n,r,a])=>`('${id(n)}','Synthetic ${r} ${n}','${r}',${a})`).join(',')};
+insert into public.profiles values ${[[1,'mentor',true],[2,'admin_lead',true],[3,'lead',true],[4,'student',true],[5,'readonly',true],[6,'admin_lead',false],[7,'admin',true],[8,'admin_lead',true]].map(([n,r,a])=>`('${id(n)}','Synthetic ${r} ${n}','${r}',${a})`).join(',')};
 insert into public.team_positions values('functional','Functional Leads',true),('unprivileged','Members',true);
 insert into public.team_member_positions values('${id(2)}','functional',null),('${id(3)}','functional',null),('${id(4)}','functional',null),('${id(5)}','functional',null),('${id(8)}','unprivileged',null);`;
 export const seed=`insert into public.pit_events(id,name,start_date,end_date,status,created_by) values('${id(100)}','Synthetic role event','2026-10-28','2026-10-30','active','${id(1)}');
@@ -28,4 +29,4 @@ insert into public.pit_checklist_run_items(id,run_id,text,display_order,required
 export const report=(n=200)=>({id:id(n),event_id:id(100),kind:'pit',team_number:4418,match_key:null,data:{schema_version:1,drive:'swerve',intake:'both',capacity:30,traversal:'trench',climb:'L2',auto_notes:'Two paths',notes:'Synthetic only'}});
 export const assignment=()=>({event_id:id(100),kind:'pit',team_number:4418,match_key:null,assignee_id:id(1),notes:'Synthetic only',version:0});
 export const snapshot=`select jsonb_build_object(${['pit_events','pit_issues','pit_issue_events','pit_batteries','pit_battery_events','pit_match_ops','pit_checklist_templates','pit_checklist_runs','pit_checklist_run_items','pit_manual_match_events','pit_scouting_observations','pit_scouting_assignments','pit_scouting_picklist','pit_scouting_management_events'].map(t=>`'${t}',(select coalesce(jsonb_agg(to_jsonb(t) order by id),'[]') from public.${t} t)`).join(',')},'receipts',(select coalesce(jsonb_agg(to_jsonb(r) order by id),'[]') from pit_private.scouting_receipts r)) state`;
-export async function install(query,{includeAdapter=true}={}){await query(bootstrap);for(const name of migrations)await query(migration(name));await query(seed);if(includeAdapter)await query(migration(adapter));}
+export async function install(query,{includeAdapter=true}={}){await query(bootstrap);for(const name of migrations)await query(migration(name));await query(seed);await query(readFileSync(new URL('./core-role-prerequisite.sql',import.meta.url),'utf8'));if(includeAdapter)await query(migration(adapter));}

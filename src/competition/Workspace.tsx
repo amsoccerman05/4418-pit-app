@@ -205,7 +205,7 @@ export function CompetitionWorkspace({
           d={d}
           data={data}
           profile={profile}
-          readOnly={c.readOnly}
+          readOnly={c.dataReadOnly}
           scheduleStale={
             !c.online ||
             !!c.feedError ||
