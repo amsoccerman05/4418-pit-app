@@ -15,6 +15,9 @@ export async function setupRole(page:Page,role:Role,{canManage=false,status='FLA
   await page.route('**/*',async route=>{
    const u=new URL(route.request().url()),p=decodeURIComponent(u.pathname);
    const fail=async()=>{violations.push(route.request().url());await route.abort();};
+   // Deterministic offline font fallback: fulfill only this exact known stylesheet.
+   // No external request is forwarded; all other unknown origins still fail.
+   if(u.href==='https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&family=Manrope:wght@400;500;600;650;700;750;800&display=swap'&&route.request().method()==='GET')return route.fulfill({contentType:'text/css',body:'/* Offline role fixture uses system font fallback. */'});
    if(u.origin!=='http://127.0.0.1:4419')return fail();
    if(p.startsWith('/offline-fixture/')){
     const api=p.slice('/offline-fixture/'.length);
