@@ -12,6 +12,28 @@ const conflictMessage =
 async function setup(page: Page) {
   const fixture = await setupOffline(page);
   const updates: Record<string, any>[] = [];
+  // The recovery fixture includes the editor's independent read-only Purchasing
+  // panel so its missing-response error cannot obscure the save error under test.
+  await page.route(
+    "**/offline-fixture/rpc/finance_repair_context",
+    async (route) => {
+      const { p_issue_id } = route.request().postDataJSON();
+      const issue = fixture.data.pit_issues.find(
+        (row) => row.id === p_issue_id,
+      );
+      await route.fulfill({
+        json: {
+          data: {
+            issue_id: p_issue_id,
+            issue_updated_at: issue.updated_at,
+            can_attach: false,
+            links: [],
+          },
+          error: null,
+        },
+      });
+    },
+  );
   let loseResponse = false,
     held: Promise<void> | null = null,
     release: () => void = () => {};
@@ -39,6 +61,9 @@ async function setup(page: Page) {
   await expect(dialog.getByLabel("Title", { exact: true })).toHaveValue(
     "Private pit repair",
   );
+  await expect(
+    dialog.getByRole("region", { name: "Repair purchasing" }),
+  ).toContainText("No purchase orders visible here.");
   const bump = (values: Record<string, unknown>) =>
     Object.assign(fixture.data.pit_issues[0], values, {
       updated_at: new Date(
@@ -77,7 +102,9 @@ test("issue conflict preserves draft and reconciles a fresh version without over
   f.bump({ status: "TESTING", assigned_to: "person" });
   const version = f.data.pit_issues[0].updated_at;
   await d.getByRole("button", { name: "Save issue", exact: true }).click();
-  await expect(d.getByRole("alert")).toContainText("Your edits are still here");
+  await expect(d.locator(':scope > [role="alert"]')).toContainText(
+    "Your edits are still here",
+  );
   await expect(d).not.toContainText("Save not confirmed");
   await expect(d.getByLabel("Title", { exact: true })).toHaveValue(
     "My typed title",
@@ -86,7 +113,7 @@ test("issue conflict preserves draft and reconciles a fresh version without over
     d.getByRole("button", { name: "Save issue", exact: true }),
   ).toBeDisabled();
   expect(f.updates).toHaveLength(1);
-  await d.getByRole("alert").scrollIntoViewIfNeeded();
+  await d.locator(':scope > [role="alert"]').scrollIntoViewIfNeeded();
   await captureOfflineState(
     page,
     test.info(),
@@ -145,7 +172,9 @@ test("overlapping edits require a choice, pause typing, and reset choices for a 
   await d.getByLabel("Title", { exact: true }).fill("My title");
   f.bump({ title: "Teammate title" });
   await d.getByRole("button", { name: "Save issue", exact: true }).click();
-  await expect(d.getByRole("alert")).toContainText("Your edits are still here");
+  await expect(d.locator(':scope > [role="alert"]')).toContainText(
+    "Your edits are still here",
+  );
   await d
     .getByRole("button", { name: "Refresh latest issue", exact: true })
     .click();
@@ -206,7 +235,9 @@ test("failed refresh keeps edits and blocks stale retry until a successful revie
     .fill("Do not lose my notes");
   f.bump({ status: "TESTING" });
   await d.getByRole("button", { name: "Save issue", exact: true }).click();
-  await expect(d.getByRole("alert")).toContainText("Your edits are still here");
+  await expect(d.locator(':scope > [role="alert"]')).toContainText(
+    "Your edits are still here",
+  );
   f.errors.set("table/pit_issues", "Synthetic refresh interruption");
   await d
     .getByRole("button", { name: "Refresh latest issue", exact: true })
@@ -245,7 +276,9 @@ test("an unknown write outcome still needs refresh and review, with no automatic
     .fill("Saved but response lost");
   f.loseNextResponse();
   await d.getByRole("button", { name: "Save issue", exact: true }).click();
-  await expect(d.getByRole("alert")).toContainText("Save not confirmed");
+  await expect(d.locator(':scope > [role="alert"]')).toContainText(
+    "Save not confirmed",
+  );
   expect(f.updates).toHaveLength(1);
   await expect(
     d.getByRole("button", { name: "Save issue", exact: true }),
@@ -271,7 +304,9 @@ test("discarding a draft requires the explicit review action and does not save",
   await d.getByLabel("Title", { exact: true }).fill("Discard only by choice");
   f.bump({ title: "Latest repair title" });
   await d.getByRole("button", { name: "Save issue", exact: true }).click();
-  await expect(d.getByRole("alert")).toContainText("Your edits are still here");
+  await expect(d.locator(':scope > [role="alert"]')).toContainText(
+    "Your edits are still here",
+  );
   await d
     .getByRole("button", { name: "Refresh latest issue", exact: true })
     .click();
@@ -321,7 +356,7 @@ test("late conflict does not replace a newer dialog and repeated submit sends on
   await expect(
     d.getByRole("region", { name: "Review issue changes" }),
   ).toHaveCount(0);
-  await expect(d.getByRole("alert")).toHaveCount(0);
+  await expect(d.locator(':scope > [role="alert"]')).toHaveCount(0);
 });
 
 test("session loss clears a conflicted draft and a held refresh cannot restore it", async ({
@@ -334,7 +369,9 @@ test("session loss clears a conflicted draft and a held refresh cannot restore i
     .fill("Private draft that must clear");
   f.bump({ status: "TESTING" });
   await d.getByRole("button", { name: "Save issue", exact: true }).click();
-  await expect(d.getByRole("alert")).toContainText("Your edits are still here");
+  await expect(d.locator(':scope > [role="alert"]')).toContainText(
+    "Your edits are still here",
+  );
   const hold = f.holdNext("table/pit_issues");
   await d
     .getByRole("button", { name: "Refresh latest issue", exact: true })
