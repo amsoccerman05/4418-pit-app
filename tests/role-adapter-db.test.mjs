@@ -11,9 +11,9 @@ test('literal Admin Lead adapter preserves ACLs/data and exact narrower boundari
  try{await install(q=>db.exec(q),{includeAdapter:false});
  const catalog=()=>owner("select n.nspname,p.proname,p.prosrc,p.proacl::text acl from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','pit_private') order by n.nspname,p.proname");
  const before=(await catalog()).rows,profiles=(await owner('select * from profiles order by id')).rows,records=await state();await db.exec(migration(adapter));
- await t.test('only eight function bodies change by explicit role addition; existing ACL/profile/business rows stay identical',async()=>{
+ await t.test('only eight function bodies change by explicit role addition plus marked post-lock guards; ACL/profile/business rows stay identical',async()=>{
   const after=(await catalog()).rows;assert.equal(before.length,after.length);
-  for(let i=0;i<after.length;i++){assert.equal(after[i].acl,before[i].acl);assert.equal(after[i].proname,before[i].proname);assert.equal(after[i].prosrc,before[i].prosrc.replaceAll("'lead'",changed.has(after[i].proname)?"'lead','admin_lead'":"'lead'"));}
+  for(let i=0;i<after.length;i++){assert.equal(after[i].acl,before[i].acl);assert.equal(after[i].proname,before[i].proname);assert.equal(after[i].prosrc.replace(/ -- BEGIN CURRENT AUTHORITY RECHECK\n[\s\S]*? -- END CURRENT AUTHORITY RECHECK\n/g,''),before[i].prosrc.replaceAll("'lead'",changed.has(after[i].proname)?"'lead','admin_lead'":"'lead'"));}
   assert.deepEqual((await owner('select * from profiles order by id')).rows,profiles);assert.deepEqual(await state(),records);
   await db.exec(actor(2));assert.equal((await db.query('select pit_private.current_role() role')).rows[0].role,'admin_lead');
  });

@@ -376,10 +376,10 @@ function App() {
     if (!profile || !latestProfile.current || !canWork(latestProfile.current) || saving.current) return false;
     if(!demo&&(pitReadOnly||offlineNow()||!accessCurrent())){setError('Read-only. Refresh your connection before saving.');return false;}
     const savedModal=modalIdentity.current,savedHash=location.hash,signal=accountRequests.current.signal;
-    const current=()=>appLive.current&&!signal.aborted&&accessCurrent()&&!!latestProfile.current&&canWork(latestProfile.current);
+    const current=()=>appLive.current&&!signal.aborted&&accessCurrent();
     saving.current=true;setBusy(true);setError('');setNotice('');
     try {
-      await mutate(demo, profile, action, p,{actorId:profile.id,signal,isCurrent:current});
+      await mutate(demo, profile, action, p,{actorId:profile.id,signal,isCurrent:()=>current()&&!!latestProfile.current&&canWork(latestProfile.current)});
       if(!current())return false;
       const refreshed=await refresh(false,true);
       if(!current())return false;
@@ -399,7 +399,7 @@ function App() {
       setUncertainSave(true);
       setError(UNKNOWN_SAVE);
       return false;
-    } finally {if(current()){saving.current=false;setBusy(false);}}
+    } finally {if(appLive.current&&!signal.aborted&&accessCurrent()){saving.current=false;setBusy(false);}}
   }
   async function reportMatch(matchId:string,p:Record<string,unknown>){
     const signal=accountRequests.current.signal,savedModal=modalIdentity.current,savedHash=location.hash;

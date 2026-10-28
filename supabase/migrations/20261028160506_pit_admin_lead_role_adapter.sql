@@ -1,6 +1,8 @@
 -- Requires Hub core 20261028160322_student_admin_lead_roles.sql.
 -- Explicit Admin Lead parity with Student/Lead, not a privileged role alias.
 -- No profile/assignment/data changes, new grants, or Mentor/Admin expansion.
+-- Hosted native run40725017478 reproduced seven post-lock stale-authority writes.
+-- Marked blocks narrowly recheck current authority at those write boundaries.
 begin;
 CREATE OR REPLACE FUNCTION public.pit_competition_manage(action text, p jsonb)
  RETURNS uuid
@@ -34,6 +36,11 @@ begin
   if not found or i.version is distinct from (p->>'version')::int or p->>'complete' is null then raise exception 'Checklist item changed. Refresh before saving';end if;
   select * into r from public.pit_checklist_runs where id=i.run_id;
   perform 1 from public.pit_events where id=r.event_id and status='active' for share;if not found then raise exception 'Event is no longer active';end if;
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
   update public.pit_checklist_run_items set completed_by=case when (p->>'complete')::boolean then auth.uid() end,completed_at=case when (p->>'complete')::boolean then clock_timestamp() end,version=version+1 where id=rid;return rid;
  end if;
  if mid is not null then select * into m from public.pit_match_ops where id=mid for update;if not found then raise exception 'Match operations not found';end if;if eid is not null and eid<>m.event_id then raise exception 'Match belongs to a different event';end if;eid:=m.event_id;end if;
@@ -253,9 +260,29 @@ begin
   if found then
    if ver<>prior_assignment.version then raise exception 'Scouting assignment changed. Refresh before saving';end if;
    before_value:=to_jsonb(prior_assignment);
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if pit_private.current_role() not in ('mentor','admin') then
+  perform 1 from public.team_member_positions mp join public.team_positions tp on tp.key=mp.position_key and tp.active
+   where mp.user_id=auth.uid() and mp.revoked_at is null and tp.category in ('Program','Functional Leads','Other Leadership') for share of mp,tp;
+ end if;
+ if not pit_private.competition_manager() then raise exception 'Active competition leadership required' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
    update public.pit_scouting_assignments set assignee_id=aid,notes=coalesce(p->>'notes',''),version=version+1,updated_by=auth.uid(),updated_at=clock_timestamp() where id=prior_assignment.id returning id,to_jsonb(pit_scouting_assignments) into rid,after_value;
   else
    if ver<>0 then raise exception 'Scouting assignment changed. Refresh before saving';end if;
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if pit_private.current_role() not in ('mentor','admin') then
+  perform 1 from public.team_member_positions mp join public.team_positions tp on tp.key=mp.position_key and tp.active
+   where mp.user_id=auth.uid() and mp.revoked_at is null and tp.category in ('Program','Functional Leads','Other Leadership') for share of mp,tp;
+ end if;
+ if not pit_private.competition_manager() then raise exception 'Active competition leadership required' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
    insert into public.pit_scouting_assignments(event_id,kind,team_number,match_key,alliance,station,assignee_id,notes,updated_by) values(eid,v_kind,team,key,v_alliance,v_station,aid,coalesce(p->>'notes',''),auth.uid()) returning id,to_jsonb(pit_scouting_assignments) into rid,after_value;
   end if;
  else
@@ -266,9 +293,29 @@ begin
   if found then
    if ver<>prior_pick.version then raise exception 'Picklist changed. Refresh before saving';end if;
    before_value:=to_jsonb(prior_pick);
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if pit_private.current_role() not in ('mentor','admin') then
+  perform 1 from public.team_member_positions mp join public.team_positions tp on tp.key=mp.position_key and tp.active
+   where mp.user_id=auth.uid() and mp.revoked_at is null and tp.category in ('Program','Functional Leads','Other Leadership') for share of mp,tp;
+ end if;
+ if not pit_private.competition_manager() then raise exception 'Active competition leadership required' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
    update public.pit_scouting_picklist set rank=(p->>'rank')::integer,status=p->>'status',notes=coalesce(p->>'notes',''),version=version+1,updated_by=auth.uid(),updated_at=clock_timestamp() where id=prior_pick.id returning id,to_jsonb(pit_scouting_picklist) into rid,after_value;
   else
    if ver<>0 then raise exception 'Picklist changed. Refresh before saving';end if;
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if pit_private.current_role() not in ('mentor','admin') then
+  perform 1 from public.team_member_positions mp join public.team_positions tp on tp.key=mp.position_key and tp.active
+   where mp.user_id=auth.uid() and mp.revoked_at is null and tp.category in ('Program','Functional Leads','Other Leadership') for share of mp,tp;
+ end if;
+ if not pit_private.competition_manager() then raise exception 'Active competition leadership required' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
    insert into public.pit_scouting_picklist(event_id,team_number,rank,status,notes,updated_by) values(eid,team,(p->>'rank')::integer,p->>'status',coalesce(p->>'notes',''),auth.uid()) returning id,to_jsonb(pit_scouting_picklist) into rid,after_value;
   end if;
  end if;
@@ -318,6 +365,12 @@ begin
  elsif exists(select 1 from public.pit_scouting_observations o where o.event_id=eid and o.kind=v_kind and o.team_number=team and o.match_key is not distinct from key and o.scout_id=scout and o.supersedes_id is null) then
   raise exception 'You already submitted this team and match. Correct the existing observation';
  end if;
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if sid is not null and prior.scout_id<>auth.uid() and not pit_private.competition_manager() then raise exception 'Only the original scout or active competition leadership may correct this observation' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
  insert into public.pit_scouting_observations(id,event_id,kind,team_number,match_key,data,supersedes_id,scout_id,created_by)
  values(rid,eid,v_kind,team,key,p->'data',sid,scout,auth.uid());
  insert into pit_private.scouting_receipts(id,actor_id,request_payload) values(rid,auth.uid(),p);
@@ -338,6 +391,11 @@ begin
  perform 1 from public.pit_events where id=v_event and status='active' for share;
  if not found then raise exception 'Select the active event before reporting an issue'; end if;
  if v_battery is not null and not exists(select 1 from public.pit_batteries where id=v_battery and active) then raise exception 'Battery is unavailable'; end if;
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
  insert into public.pit_issues(event_id,title,subsystem,severity,description,reported_by,discovered_match,battery_id)
  values(v_event,left(trim(p->>'description'),100),p->>'subsystem',p->>'severity',trim(p->>'description'),auth.uid(),coalesce(p->>'discovered_match',''),v_battery) returning id into v_id;
  insert into public.pit_issue_events(issue_id,performed_by,changes) values(v_id,auth.uid(),jsonb_build_object('status',jsonb_build_object('from',null,'to','OPEN')));
@@ -366,6 +424,13 @@ begin
  if v_event is not null then
  perform 1 from public.pit_events where id=v_event and status='active' for share;
  if not found then raise exception 'Event changed. Refresh and try again.'; end if; end if;
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['student','lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ if b.status='RETIRED' or target='RETIRED' then perform pit_private.require_role(array['admin','mentor']);end if;
+ if b.status='FLAGGED' and target<>'FLAGGED' then perform pit_private.require_role(array['lead','admin_lead','admin','mentor']);end if;
+ -- END CURRENT AUTHORITY RECHECK
  update public.pit_batteries set status=target,updated_at=clock_timestamp() where id=b.id;
  insert into public.pit_battery_events(battery_id,event_id,event_type,from_status,to_status,voltage,voltage_kind,match_number,notes,performed_by)
  values(b.id,v_event,case when target=b.status then 'measurement' else 'status_changed' end,b.status,target,v_voltage,case when v_voltage is null then null else p->>'voltage_kind' end,coalesce(p->>'match_number',''),coalesce(p->>'notes',''),auth.uid());
@@ -384,6 +449,11 @@ begin
  if not found then raise exception 'Issue not found'; end if;
  if old_row.updated_at is distinct from (p->>'expected_updated_at')::timestamptz then raise exception 'This issue changed on another device. Close and reopen it before saving.'; end if;
  if nullif(p->>'assigned_to','') is not null and not exists(select 1 from public.profiles where id=(p->>'assigned_to')::uuid and active) then raise exception 'Assignee must be an active team member'; end if;
+ -- BEGIN CURRENT AUTHORITY RECHECK
+ -- Recheck after blocking business locks; hold current actor authority through commit.
+ perform 1 from public.profiles where id=auth.uid() and active and role::text=any(array['lead','admin_lead','mentor','admin']) for share;
+ if not found then raise exception 'Insufficient Pit Operations permissions' using errcode='42501';end if;
+ -- END CURRENT AUTHORITY RECHECK
  update public.pit_issues set title=coalesce(p->>'title',title),severity=coalesce(p->>'severity',severity),status=coalesce(p->>'status',status),
  assigned_to=case when p?'assigned_to' then nullif(p->>'assigned_to','')::uuid else assigned_to end,
  battery_id=case when p?'battery_id' then nullif(p->>'battery_id','')::uuid else battery_id end,
