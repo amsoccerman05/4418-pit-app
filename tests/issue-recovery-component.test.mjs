@@ -103,6 +103,7 @@ function component() {
     data: { profiles: [], batteries: [], issueEvents: [] },
     profile: { id: "me", role: "lead", active: true },
     busy: false,
+    saving: false,
     refreshing: false,
     conflict: false,
     name: String,
@@ -242,6 +243,14 @@ test("readonly and blocked editors never submit a programmatic stale form", () =
   f.props.busy = true;
   f.submit();
   assert.equal(f.sent.length, 0);
+});
+
+test("read-only recovery does not claim a save is still running", () => {
+  const f = component();
+  f.props.busy = true;
+  assert.equal(f.button("Save issue").props.disabled, true);
+  f.props.saving = true;
+  assert.equal(f.button("Saving…").props.disabled, true);
 });
 
 async function saveFailure(error, { moved = false, expired = false } = {}) {

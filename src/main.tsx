@@ -1171,6 +1171,7 @@ function App() {
               data={data}
               profile={profile}
               busy={writeBusy}
+              saving={busy}
               refreshing={loading}
               conflict={issueConflict===issue.id}
               refresh={()=>refresh(true)}
@@ -1395,11 +1396,13 @@ function IssueDetail({
   name,
   submit,
   refreshing,
+  saving,
   conflict,
   refresh,
   reconciled,
 }: {
   issue: Issue;
+  saving: boolean;
   refreshing: boolean;
   conflict: boolean;
   refresh: () => Promise<boolean>;
@@ -1686,7 +1689,7 @@ function IssueDetail({
         {editable ? (
           <div className="form-actions">
             <button className="primary" disabled={busy || needsReview}>
-              {busy ? "Saving…" : "Save issue"}
+              {saving ? "Saving…" : "Save issue"}
             </button>
           </div>
         ) : (
