@@ -1,3 +1,4 @@
+import {isIssueConflict,issueChanges,reconcileIssue,type IssueChoices,type IssueEditField} from './issue-recovery';
 import {ScoutingWorkspace} from './scouting/ScoutingWorkspace';
 import {accessFailure,offlineNow,PIT_STALE_MS,PRIVATE_SNAPSHOT_MAX_AGE_MS,UNKNOWN_SAVE} from './connection';
 import {isStale} from './competition/feed-state';
@@ -189,6 +190,7 @@ function Dialog({
 }
 function App() {
   const [scoutingRefreshVersion, setScoutingRefreshVersion] = useState(0);
+  const [issueConflict, setIssueConflict] = useState<string | null>(null);
   const [demo, setDemo] = useState(false),
     [role, setRole] = useState<Role>("student"),
     [profile, setProfile] = useState<Profile | null>(null),
@@ -225,6 +227,7 @@ function App() {
   const accessCurrent=useCallback(()=>demo||(sessionGeneration===accessEpoch.current&&authAllowed.current&&authIdentity.current===userId&&(!expiresAt.current||expiresAt.current>Date.now())),[demo,userId,sessionGeneration]);
   const competition = useCompetition(profile, data.events.find(e=>e.status==='active')?.id, demo, ['dashboard','matches','scouting','admin'].includes(page),sessionGeneration,pitReadOnly,invalidateAccess,accessCurrent,accountRequests.current.signal);
   const modalIdentity=useRef<Modal>(modal);modalIdentity.current=modal;
+  useEffect(()=>setIssueConflict(null),[modal]);
   const [issueHash,setIssueHash]=useState(()=>location.hash);
   useEffect(()=>{const changed=()=>setIssueHash(location.hash);window.addEventListener('hashchange',changed);return()=>window.removeEventListener('hashchange',changed);},[]);
   const closeModal=()=>{
@@ -382,6 +385,13 @@ function App() {
     } catch (e) {
       if(!current())return false;
       if(accessFailure(e)){invalidateAccess();return false;}
+      if(action==='update_issue'&&isIssueConflict(e)){
+        if(canDismissCompletedEditor(savedModal,modalIdentity.current,savedHash,location.hash)){
+          setIssueConflict(String(p.id));
+          setError('This issue changed on another device. Your edits are still here. Refresh and review the latest version before saving.');
+        }
+        return false;
+      }
       setUncertainSave(true);
       setError(UNKNOWN_SAVE);
       return false;
@@ -1161,6 +1171,11 @@ function App() {
               data={data}
               profile={profile}
               busy={writeBusy}
+              saving={busy}
+              refreshing={loading}
+              conflict={issueConflict===issue.id}
+              refresh={()=>refresh(true)}
+              reconciled={()=>{setIssueConflict(null);setError('');}}
               name={name}
               submit={(p) => save("update_issue", p)}
             />
@@ -1380,8 +1395,18 @@ function IssueDetail({
   busy,
   name,
   submit,
+  refreshing,
+  saving,
+  conflict,
+  refresh,
+  reconciled,
 }: {
   issue: Issue;
+  saving: boolean;
+  refreshing: boolean;
+  conflict: boolean;
+  refresh: () => Promise<boolean>;
+  reconciled: () => void;
   demo: boolean;
   purchaseScope: PurchasingScope;
   data: Data;
@@ -1391,7 +1416,39 @@ function IssueDetail({
   submit: (p: Record<string, unknown>) => Promise<boolean>;
 }) {
   const [draft, setDraft] = useState(i);
+  const [base, setBase] = useState(i);
+  const [reviewing, setReviewing] = useState(false);
+  const [review, setReview] = useState<{
+    version: string;
+    choices: IssueChoices;
+  }>({ version: i.updated_at, choices: {} });
   const editable = canManage(profile);
+  const newerVersion = i.updated_at !== base.updated_at;
+  const needsReview = newerVersion || conflict;
+  const changes = issueChanges(base, draft, i);
+  const choices = review.version === i.updated_at ? review.choices : {};
+  const unresolvedChoices = changes.some(
+    ({ key, conflict }) => conflict && !choices[key],
+  );
+  const displayValue = (issue: Issue, key: IssueEditField) =>
+    key === "assigned_to"
+      ? issueOwner(issue, data.profiles)
+      : key === "battery_id"
+        ? batteryReference(
+            data.batteries.find((b) => b.id === issue.battery_id),
+            issue.battery_id ? "Unavailable battery" : "None",
+          )
+        : String(issue[key] || "Not set");
+  const applyReview = (discard = false) => {
+    if (busy || refreshing || !newerVersion) return;
+    const merged = discard ? i : reconcileIssue(base, draft, i, choices);
+    if (!merged) return;
+    setDraft(merged);
+    setBase(i);
+    setReviewing(false);
+    setReview({ version: i.updated_at, choices: {} });
+    reconciled();
+  };
   const patch = (k: string, v: string | null) =>
     setDraft((d) => ({ ...d, [k]: v }));
   return (
@@ -1418,7 +1475,9 @@ function IssueDetail({
           <p>
             Battery:{" "}
             <strong>
-              {batteryReference(data.batteries.find((b) => b.id === i.battery_id))}
+              {batteryReference(
+                data.batteries.find((b) => b.id === i.battery_id),
+              )}
             </strong>
           </p>
         )}
@@ -1428,9 +1487,113 @@ function IssueDetail({
           </small>
         )}
       </div>
+      {editable && needsReview && (
+        <section className="issue-conflict" aria-label="Review issue changes">
+          <h3>This issue has changed</h3>
+          <p>
+            Your edits are still here. Review the latest version before saving;
+            nothing is saved automatically.
+          </p>
+          <div className="button-row">
+            <button
+              type="button"
+              className="secondary"
+              disabled={refreshing}
+              onClick={() => void refresh()}
+            >
+              {refreshing ? "Refreshing…" : "Refresh latest issue"}
+            </button>
+            {newerVersion && !reviewing && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || refreshing}
+                onClick={() => setReviewing(true)}
+              >
+                Review changes
+              </button>
+            )}
+          </div>
+          {newerVersion && reviewing && (
+            <>
+              <p>
+                Unchanged fields will use the latest version. Your other edits
+                will stay in the form. Editing is paused while you review.
+              </p>
+              {changes.map(({ key, label, conflict: overlap }) => (
+                <div className="issue-conflict-field" key={key}>
+                  <strong>{label}</strong>
+                  <p>
+                    <b>Latest saved:</b> {displayValue(i, key)}
+                  </p>
+                  {overlap && (
+                    <>
+                      <p>
+                        <b>Your edit:</b> {displayValue(draft, key)}
+                      </p>
+                      <Field label={`Use for ${label.toLowerCase()}`}>
+                        <select
+                          value={choices[key] || ""}
+                          disabled={busy || refreshing}
+                          onChange={(e) =>
+                            setReview({
+                              version: i.updated_at,
+                              choices: {
+                                ...choices,
+                                [key]: e.target.value as "mine" | "latest",
+                              },
+                            })
+                          }
+                        >
+                          <option value="">Choose which to keep…</option>
+                          <option value="mine">Keep my edit</option>
+                          <option value="latest">Use latest saved</option>
+                        </select>
+                      </Field>
+                    </>
+                  )}
+                </div>
+              ))}
+              <div className="form-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy || refreshing || unresolvedChoices}
+                  onClick={() => applyReview()}
+                >
+                  Apply reviewed changes
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy || refreshing}
+                  onClick={() => {
+                    setReviewing(false);
+                    setReview({ version: i.updated_at, choices: {} });
+                  }}
+                >
+                  Back to my draft
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy || refreshing}
+                  onClick={() => applyReview(true)}
+                >
+                  Discard my edits and use latest
+                </button>
+              </div>
+              <p className="form-help">
+                Review the form, then choose Save issue when you are ready.
+              </p>
+            </>
+          )}
+        </section>
+      )}
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          if (needsReview || busy || !editable) return;
           void submit({
             id: i.id,
             expected_updated_at: draft.updated_at,
@@ -1447,7 +1610,7 @@ function IssueDetail({
           });
         }}
       >
-        <fieldset disabled={!editable || busy}>
+        <fieldset disabled={!editable || busy || reviewing}>
           <Field label="Title">
             <input
               required
@@ -1502,7 +1665,8 @@ function IssueDetail({
                 <option value="">No battery linked</option>
                 {data.batteries.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {batteryReference(b)}{!b.active ? " · Archived" : ""}
+                    {batteryReference(b)}
+                    {!b.active ? " · Archived" : ""}
                   </option>
                 ))}
               </select>
@@ -1524,8 +1688,8 @@ function IssueDetail({
         </fieldset>
         {editable ? (
           <div className="form-actions">
-            <button className="primary" disabled={busy}>
-              {busy ? "Saving…" : "Save issue"}
+            <button className="primary" disabled={busy || needsReview}>
+              {saving ? "Saving…" : "Save issue"}
             </button>
           </div>
         ) : (
@@ -1534,7 +1698,15 @@ function IssueDetail({
           </p>
         )}
       </form>
-      <PurchaseLinks key={`${i.id}:${i.updated_at}:${demo}`} issueId={i.id} issueUpdatedAt={i.updated_at} editable={editable} demo={demo} busy={busy} scope={purchaseScope}/>
+      <PurchaseLinks
+        key={`${i.id}:${i.updated_at}:${demo}`}
+        issueId={i.id}
+        issueUpdatedAt={i.updated_at}
+        editable={editable}
+        demo={demo}
+        busy={busy}
+        scope={purchaseScope}
+      />
       <h3 className="history-heading">Issue history</h3>
       <div className="timeline">
         {data.issueEvents
@@ -1550,7 +1722,13 @@ function IssueDetail({
                   {k === "assigned_to"
                     ? `${v.from ? name(String(v.from)) : "Unassigned"} → ${v.to ? name(String(v.to)) : "Unassigned"}`
                     : k === "battery_id"
-                      ? `${batteryReference(data.batteries.find((b) => b.id === v.from), v.from ? "Unknown battery" : "None")} → ${batteryReference(data.batteries.find((b) => b.id === v.to), v.to ? "Unknown battery" : "None")}`
+                      ? `${batteryReference(
+                          data.batteries.find((b) => b.id === v.from),
+                          v.from ? "Unknown battery" : "None",
+                        )} → ${batteryReference(
+                          data.batteries.find((b) => b.id === v.to),
+                          v.to ? "Unknown battery" : "None",
+                        )}`
                       : `${v.from || "—"} → ${v.to || "—"}`}
                 </p>
               ))}

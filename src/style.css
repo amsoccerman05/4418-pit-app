@@ -1579,3 +1579,11 @@ a:focus-visible, button:focus-visible { outline-color: var(--suite-primary); }
 .dialog-head > button { flex-shrink: 0; }
 
 .battery-identity-conflict { overflow-wrap: anywhere; min-width: 0; }
+
+/* Issue conflicts keep the editable draft beside an explicit latest-version review. */
+.issue-conflict { border: 1px solid var(--border); border-left: 4px solid #b7791f; border-radius: 10px; padding: 16px; margin: 16px 0; }
+.issue-conflict h3 { margin-top: 0; }
+.issue-conflict-field { border-top: 1px solid var(--border); padding: 12px 0; overflow-wrap: anywhere; }
+.issue-conflict-field p { white-space: pre-wrap; }
+.issue-conflict .form-actions, .issue-conflict .button-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.issue-conflict button { white-space: normal; }

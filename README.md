@@ -78,6 +78,12 @@ No additional migration is needed: the existing `pit_battery_events.match_number
 
 Subscriptions cover issues, batteries, both histories, and event changes, with cleanup on logout/unmount. Profile changes are subscribed when the existing profile publication permits them. A 20-second refresh and focus refresh provide fallback and recheck active profiles. Stale write conflicts are shown rather than silently overwritten. Safety-critical Pit writes are not queued; errors keep forms open. Scouting submissions use their separate durable reconnect queue. Realtime shows its connection state separately from last refresh time. Changes update the current device after a successful save.
 
+### Recovering an issue edit conflict
+
+When another teammate updates an open issue, the editor keeps your draft and blocks stale saves. Choose **Refresh latest issue**, then **Review changes**. Fields you did not edit take the latest saved value; if both people changed the same field differently, choose which value to keep. **Apply reviewed changes** updates the form and its version check, but does not save it—review the result and choose **Save issue**. Editing is paused during review; **Back to my draft** keeps your work and clears review choices. **Discard my edits and use latest** is the explicit alternative.
+
+A failed refresh preserves the draft and keeps stale saves blocked. A newer refresh resets choices for the changed version. Unknown network outcomes still use the existing refresh-before-retry warning; safety-critical writes are never queued or automatically replayed. Drafts remain memory-only and clear when the dialog closes or account access ends.
+
 ### Poor-internet read-only view
 
 A loaded signed-in tab keeps its last successful schedule and Pit snapshot readable when internet drops. Offline/stale banners retain original timestamps; readiness changes to **VERIFY STATUS**, and writes are blocked until the connection and current records can be checked. No safety-critical Pit writes are queued or automatically replayed. Scouting has a separate cloud-first submission queue described above. Private snapshots stay in memory and clear on sign-out, account change, session expiry, or observed loss of access. This does not provide offline reload/cold-start support. See [behavior, safety, and verification](docs/POOR-INTERNET.md).
