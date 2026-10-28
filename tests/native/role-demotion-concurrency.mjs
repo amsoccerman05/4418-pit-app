@@ -53,10 +53,10 @@ const blocked = (...names) => waitFor(() => Number(sql(`select count(*) from pg_
   where application_name in (${names.map(literal).join(',')}) and wait_event_type='Lock'`)) === names.length, `${names.join(', ')} lock wait`);
 
 const call=(fn,p)=>`${actor(2)}select public.${fn}(${json(p)});`;
-const competition=(action,p)=>`${actor(2)}select public.pit_competition_manage(${literal(action)},${json(p)});`;
+const competition=(action,p,who=2)=>`${actor(who)}select public.pit_competition_manage(${literal(action)},${json(p)});`;
 const scouting=p=>`${actor(2)}select public.pit_scouting_manage('assignment',${json(p)});`;
 const demote=`update public.profiles set role='readonly' where id='${id(2)}';`;
-const restore=`update public.profiles set role='admin_lead',active=true where id='${id(2)}';update public.team_member_positions set revoked_at=null where user_id='${id(2)}';`;
+const restore=`update public.profiles set role='lead',active=true where id='${id(3)}';update public.profiles set role='student',active=true where id='${id(4)}';update public.profiles set role='admin_lead',active=true where id='${id(2)}';update public.team_member_positions set revoked_at=null where user_id='${id(2)}';`;
 async function scenario(name,lock,query,change=demote){
  const before=sql(snapshot);let gate;
  try{gate=await transactionGate(lock,`${name}-gate`);
@@ -84,6 +84,12 @@ try{
  // Independent assignee avoids incidental assignee-role rejection masking actor loss.
  // A new target keeps this test independent if an earlier expected denial fails.
  await scenario('position-revocation',`select pg_advisory_xact_lock(hashtextextended('pit-scouting-management:${id(100)}',0));`,scouting({...assignment(),team_number:1619}),`update team_member_positions set revoked_at=now() where user_id='${id(2)}';`);
+ // Additional row-lock boundaries: an advisory control alone is not enough.
+ sql(`insert into pit_match_ops(id,event_id,match_key,updated_by) values('${id(106)}','${id(100)}','2026test_qm1','${id(1)}');`);
+ await scenario('competition-config-row-demotion',`select 1 from pit_event_config where event_id='${id(100)}' for update;`,competition('config',{event_id:id(100),version:1,team_number:4418,tba_event_key:'2026test',nexus_event_key:null}));
+ await scenario('competition-match-row-demotion',`select 1 from pit_match_ops where id='${id(106)}' for update;`,competition('match',{event_id:id(100),match_id:id(106),version:1,note:'Forbidden pending preparation',battery_id:null}));
+ await scenario('student-run-template-row-demotion',`select 1 from pit_checklist_templates where id='${id(103)}' for update;`,competition('run',{id:id(107),event_id:id(100),match_id:id(106),template_id:id(103),template_version:1},4),`update profiles set role='readonly' where id='${id(4)}';`);
+ await scenario('lead-link-issue-row-demotion',`select 1 from pit_issues where id='${id(102)}' for update;`,competition('link_issue',{event_id:id(100),match_id:id(106),issue_id:id(102)},3),`update profiles set role='readonly' where id='${id(3)}';`);
  assert.deepEqual(failures,[],`Native lock-wait authorization failures: ${failures.join(' | ')}`);
  console.log(`${checks} Pit native lock-wait/demotion checks passed; PostgreSQL ${sql('show server_version')}.`);
 }finally{
