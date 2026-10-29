@@ -57,7 +57,7 @@ export function CrewQuickStart({
                   No active event.{" "}
                   {writable && isAdmin(profile)
                     ? "Activate an event in Event before starting."
-                    : "Ask a mentor or admin to activate an event before starting."}
+                    : "Ask a mentor to activate an event before starting."}
                 </p>
                 <button type="button" onClick={() => go("admin")}>
                   Open Event
@@ -109,7 +109,7 @@ export function CrewQuickStart({
             <p className="comp-crew-battery-note">
               <strong>The battery list may be incomplete.</strong> Confirm the
               physical label and status with the battery crew before use. If a
-              battery is missing, ask a mentor or admin to add it.
+              battery is missing, ask a mentor to add it.
             </p>
             <p>
               Assigning a battery does not install it.{" "}

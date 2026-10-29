@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
 import {execFileSync,spawn} from 'node:child_process';
 import {join,isAbsolute} from 'node:path';import {tmpdir} from 'node:os';
-import {install,id,literal,json,actor,report,assignment,snapshot} from '../helpers/role-database.mjs';
+import {install,migration,id,literal,json,actor,report,assignment,snapshot} from '../helpers/role-database.mjs';
 const bin=process.env.PIT_ROLE_PG_BIN;
 assert(bin&&isAbsolute(bin),'Set PIT_ROLE_PG_BIN to an installed PostgreSQL bin directory');
 const root=mkdtempSync(join(tmpdir(),'pit-role-native-')),data=join(root,'db');
@@ -56,7 +56,7 @@ const call=(fn,p)=>`${actor(2)}select public.${fn}(${json(p)});`;
 const competition=(action,p,who=2)=>`${actor(who)}select public.pit_competition_manage(${literal(action)},${json(p)});`;
 const scouting=p=>`${actor(2)}select public.pit_scouting_manage('assignment',${json(p)});`;
 const demote=`update public.profiles set role='readonly' where id='${id(2)}';`;
-const restore=`update public.profiles set role='lead',active=true where id='${id(3)}';update public.profiles set role='student',active=true where id='${id(4)}';update public.profiles set role='admin_lead',active=true where id='${id(2)}';update public.team_member_positions set revoked_at=null where user_id='${id(2)}';`;
+const restore=`update profiles set role='mentor',active=true where id='${id(1)}';update public.profiles set role='lead',active=true where id='${id(3)}';update public.profiles set role='student',active=true where id='${id(4)}';update public.profiles set role='admin_lead',active=true where id='${id(2)}';update public.team_member_positions set revoked_at=null where user_id='${id(2)}';`;
 async function scenario(name,lock,query,change=demote){
  const before=sql(snapshot);let gate;
  try{gate=await transactionGate(lock,`${name}-gate`);
@@ -73,6 +73,8 @@ try{
  execFileSync(join(bin,'initdb'),['-D',data,'-A','trust','-U','postgres','--no-locale','--encoding=UTF8'],{env,stdio:'pipe',timeout:30000});
  execFileSync(join(bin,'pg_ctl'),['-D',data,'-l',join(root,'server.log'),'-o',`-k ${root} -c listen_addresses='' -c unix_socket_permissions=0700`,'-w','start'],{env,stdio:'pipe',timeout:30000});started=true;
  await install(sql);
+ sql(`insert into profiles(id,display_name,role,active) values('${id(9)}','Synthetic backup Mentor','mentor',true);update profiles set role='admin_lead' where role='admin';alter table profiles drop constraint profiles_role_check;alter table profiles add constraint profiles_role_check check(role in ('readonly','student','lead','admin_lead','mentor'));`);
+ sql(migration('20261029190427_pit_canonical_roles.sql'));
  const version=sql(`select updated_at from pit_issues where id='${id(102)}'`);
  await scenario('issue-row-demotion',`select 1 from pit_issues where id='${id(102)}' for update;`,call('pit_update_issue',{id:id(102),expected_updated_at:version,title:'Forbidden pending edit'}));
  await scenario('battery-advisory-demotion','select pg_advisory_xact_lock(4418,1);',call('pit_transition_battery',{id:id(101),expected_status:'READY',status:'CHARGING',voltage:12.5,voltage_kind:'pre-match',notes:'Forbidden pending measurement'}));
@@ -90,6 +92,16 @@ try{
  await scenario('competition-match-row-demotion',`select 1 from pit_match_ops where id='${id(106)}' for update;`,competition('match',{event_id:id(100),match_id:id(106),version:1,note:'Forbidden pending preparation',battery_id:null}));
  await scenario('student-run-template-row-demotion',`select 1 from pit_checklist_templates where id='${id(103)}' for update;`,competition('run',{id:id(107),event_id:id(100),match_id:id(106),template_id:id(103),template_version:1},4),`update profiles set role='readonly' where id='${id(4)}';`);
  await scenario('lead-link-issue-row-demotion',`select 1 from pit_issues where id='${id(102)}' for update;`,competition('link_issue',{event_id:id(100),match_id:id(106),issue_id:id(102)},3),`update profiles set role='readonly' where id='${id(3)}';`);
+ const mentorCall=(fn,p)=>`${actor(1)}select public.${fn}(${json(p)});`;
+ const mentorDemote=`update profiles set role='readonly' where id='${id(1)}';`;
+ const eventEdit={id:id(100),name:'Forbidden event edit',start_date:'2026-10-28',end_date:'2026-10-30'};
+ await scenario('mentor-battery-metadata-row-demotion',`select 1 from pit_batteries where id='${id(101)}' for update;`,mentorCall('pit_save_battery',{id:id(101),battery_number:'B01',notes:'Forbidden metadata edit'}),mentorDemote);
+ await scenario('mentor-event-metadata-row-demotion',`select 1 from pit_events where id='${id(100)}' for update;`,mentorCall('pit_save_event',eventEdit),mentorDemote);
+ await scenario('mentor-event-activation-advisory-demotion','select pg_advisory_xact_lock(4418,2);',mentorCall('pit_activate_event',{id:id(100)}),mentorDemote);
+ await scenario('mentor-event-activation-row-demotion',`select 1 from pit_events where id='${id(100)}' for update;`,mentorCall('pit_activate_event',{id:id(100)}),mentorDemote);
+ // Real lock wait positive control: current Mentor authority must still succeed.
+ const gate=await transactionGate(`select 1 from pit_batteries where id='${id(101)}' for update;`,'mentor-positive-gate');
+ try{const request=asyncSQL(mentorCall('pit_save_battery',{id:id(101),battery_number:'B01',notes:'Authorized after wait'}),'mentor-positive-write');await blocked('mentor-positive-write');await gate.release();await request;assert.equal(sql(`select notes from pit_batteries where id='${id(101)}'`),'Authorized after wait');checks++;console.log('PASS Pit: current-Mentor lock-wait positive control');}finally{await gate.release();}
  assert.deepEqual(failures,[],`Native lock-wait authorization failures: ${failures.join(' | ')}`);
  console.log(`${checks} Pit native lock-wait/demotion checks passed; PostgreSQL ${sql('show server_version')}.`);
 }finally{

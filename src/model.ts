@@ -28,7 +28,7 @@ export const batteryStatuses = [
   "FLAGGED",
   "RETIRED",
 ] as const;
-export type Role = "readonly" | "student" | "lead" | "admin_lead" | "admin" | "mentor";
+export type Role = "readonly" | "student" | "lead" | "admin_lead" | "mentor";
 export type Profile = {
   id: string;
   display_name: string;
@@ -108,11 +108,11 @@ export type Data = {
   issueEvents: IssueEvent[];
   profiles: Profile[];
 };
-export const canWork = (p: Profile) => p.active && ["student", "lead", "admin_lead", "admin", "mentor"].includes(p.role);
+export const canWork = (p: Profile) => p.active && ["student", "lead", "admin_lead", "mentor"].includes(p.role);
 export const canManage = (p: Profile) =>
-  p.active && ["lead", "admin_lead", "admin", "mentor"].includes(p.role);
+  p.active && ["lead", "admin_lead", "mentor"].includes(p.role);
 export const isAdmin = (p: Profile) =>
-  p.active && ["admin", "mentor"].includes(p.role);
+  p.active && ["mentor"].includes(p.role);
 /** Only advertise transitions the existing server role rules permit. */
 export function batteryStatusOptions(p: Profile, b: Pick<Battery, "status" | "active">): Battery["status"][] {
   if (!canWork(p) || !b.active || (b.status === "RETIRED" && !isAdmin(p))) return [];

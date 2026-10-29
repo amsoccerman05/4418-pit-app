@@ -31,7 +31,7 @@ Set `.env.local` to the **existing Inventory Supabase project's** URL and public
 1. In the existing Inventory project's SQL editor, verify `public.profiles` has `id uuid`, `display_name text`, `role` (text or compatible enum), and `active boolean`. This contract was confirmed in the neighboring Inventory repository, but the deployed database must match it. The migration fails transactionally if the columns are missing. Do **not** run Inventory migrations in this repository or create duplicate profiles.
 2. Run **`supabase/migrations/202609090001_pit_operations.sql` once**, as an owner through the SQL editor or your trusted migration pipeline. It is intentionally not run by this application. It creates only Pit tables/functions/schema/indexes/policies and adds the Pit tables to `supabase_realtime` if that publication exists. It does not alter Inventory tables, profile policies, or authentication triggers. The migration is transactional and is not intended to be rerun after success.
 3. Verify `pit_events`, `pit_issues`, `pit_batteries`, `pit_battery_events`, and `pit_issue_events` are enabled under the `supabase_realtime` publication. If the publication did not exist at migration time, enable these tables manually in Supabase's replication/publications settings.
-4. Sign in using an existing active admin or mentor account. Create an event under **Manage**, then **Activate event**. Add batteries under **Batteries → Add battery** using the name on the physical battery. Names are primary throughout the app; automatically assigned system IDs stay secondary for history and duplicate-name clarity. Existing unnamed batteries retain their B-code display. New batteries begin in TESTING; check them and mark ready. No fake event or battery seed is inserted into production.
+4. Sign in using an existing active Mentor account. Create an event under **Manage**, then **Activate event**. Add batteries under **Batteries → Add battery** using the name on the physical battery. Names are primary throughout the app; automatically assigned system IDs stay secondary for history and duplicate-name clarity. Existing unnamed batteries retain their B-code display. New batteries begin in TESTING; check them and mark ready. No fake event or battery seed is inserted into production.
 5. Use existing Inventory account administration / Supabase Auth for invitations and password resets. Password login is provided here; account creation and recovery flows remain with the existing account system. Add `https://pit.frc4418.org` to allowed auth redirect URLs if you later enable redirect-based login or recovery here. Do not replace Inventory's existing Site URL or redirects.
 
 Tables:
@@ -53,9 +53,10 @@ RLS is enabled on all five Pit tables. Authenticated **active** shared profiles 
 | readonly       | View only                                                             |
 | student        | Report issues; battery workflow and measurements                      |
 | lead           | Student access plus issue management and release flagged batteries    |
-| admin / mentor | Full Pit operations, event and battery management, retirement/archive |
+| admin_lead     | Lead access; competition management still requires an assigned leadership position |
+| mentor         | Full Pit operations, event and battery management, retirement/archive |
 
-Students cannot release FLAGGED batteries. Only admins/mentors may retire or restore RETIRED batteries. Retire before archiving; reactivate before changing archived battery status. History remains readable. Deletion is deliberately absent so competition records are preserved.
+Students cannot release FLAGGED batteries. Only Mentors may retire or restore RETIRED batteries. Retire before archiving; reactivate before changing archived battery status. History remains readable. Deletion is deliberately absent so competition records are preserved.
 
 A unique partial index allows one active event. Activation completes the preceding event atomically. A second partial index and transaction lock prevent multiple installed batteries. The dashboard also handles multiple ON ROBOT records defensively with a warning. Battery commands check the expected status; issue edits check `updated_at` to reject stale overwrites. Writes and history records commit together. A battery issue link appears in both issue detail and battery history.
 
@@ -65,7 +66,7 @@ Batteries are a shared fleet across events. Their activity is stamped with the a
 
 ## Battery quick actions
 
-The Batteries page header offers **Add battery** only to admins and mentors. Issue reporting stays on the Dashboard and Issues pages.
+The Batteries page header offers **Add battery** only to Mentors. Issue reporting stays on the Dashboard and Issues pages.
 
 - **Install on robot** remains one tap without a match. **Install with match** opens an optional match field (for example `Q42`, `SF3-1`, or `F2`).
 - **Remove battery** opens a quick dialog with Match (prefilled from the installation), optional post-match voltage, and Cooling / Testing / Flagged as the next status.
@@ -147,7 +148,7 @@ Recommended next small iteration: run a practice-match session with the pit crew
 Apply Hub core `20261028160322_student_admin_lead_roles.sql` before the additive
 Pit migration `20261028160506_pit_admin_lead_role_adapter.sql`. No accounts or
 position assignments are converted. Admin Lead inherits Student/Lead issue,
-battery and scouting work, but is **not** Mentor/Admin: event/battery metadata
+battery and scouting work, but is **not** Mentor: event/battery metadata
 administration and retirement remain staff-only. Competition/scouting management
 still requires the existing qualifying active position category. Read only never
 performs business writes, even with a retained position or callback.
@@ -164,3 +165,26 @@ Run with `PIT_ROLE_PG_BIN=/path/to/installed/postgresql/bin`. No existing databa
 URL, live account or production credentials are used. New role browser fixtures
 are local source/dev harnesses and fail closed on unexpected HTTP/WebSocket
 traffic; their captures are not a production-artifact walkthrough.
+
+## Canonical five-role correction
+
+Apply Hub's reviewed canonical-role migration first, then
+`20261029190427_pit_canonical_roles.sql`, before this frontend. The shared account
+model is Readonly, Student, Lead, Admin Lead, and Mentor. Owner Admin is removed,
+not retained as a privileged alias. Hub owns the explicitly approved account
+conversion and the last-Mentor safeguard; this Pit migration changes no accounts,
+positions, grants, or business records.
+
+Only Mentor administers event/fleet metadata, event activation, battery retirement
+and archive. Admin Lead keeps Lead repair/battery work; assigned qualifying
+leadership remains required for non-Mentor competition/scouting management.
+Readonly and inactive profiles cannot write. Existing event and battery history
+stays readable. An open administration draft is retained but disabled if Mentor
+authority is removed, and restoration never auto-saves it.
+
+The migration pins all 11 changed function definitions/owners/ACLs and 10 SELECT
+policies, rejecting unexpected production drift transactionally. It retains the
+existing post-lock guards and adds Mentor rechecks after event/fleet lock waits.
+Native CI retains 12 previous authority-loss cases, adds four Mentor lock-wait
+denials, and includes a current-Mentor positive control. Browser tests cover both
+phone and desktop canonical-role controls and interrupted administration drafts.
