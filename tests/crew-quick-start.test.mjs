@@ -212,3 +212,10 @@ test("stale official schedule labels its preparation snapshot while manual prepa
     !html.includes("Confirm the latest match and timing with the field crew."),
   );
 });
+
+// The hook's readOnly includes account authority; the guide separately checks
+// canWork and must receive freshness-only state or Readonly is mislabeled stale.
+test("workspace passes data freshness separately from account write eligibility", () => {
+ const source=readFileSync(new URL('../src/competition/Workspace.tsx',import.meta.url),'utf8');
+ assert.match(source, /<CrewQuickStart[\s\S]*?readOnly=\{c\.dataReadOnly\}/);
+});

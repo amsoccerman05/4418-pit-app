@@ -15,12 +15,12 @@ type HeldRequest = {
 };
 
 /** In-memory test server. Every response is captured when its request starts. */
-export async function setupOffline(page: Page) {
-  const now = Date.now();
+export async function setupOffline(page: Page, options: {now?: number; role?: string; canManage?: boolean; beforeOpen?: (state: {data: Record<string, any[]>; context: any}) => Promise<void>} = {}) {
+  const now = options.now ?? Date.now();
   const profile = {
     id: "person",
     display_name: "Private crew member",
-    role: "mentor",
+    role: options.role || "mentor",
     active: true,
   };
   const data: Record<string, any[]> = {
@@ -74,7 +74,7 @@ export async function setupOffline(page: Page) {
     pit_issue_events: [],
   };
   const context: any = {
-    can_manage: true,
+    can_manage: options.canManage ?? true,
     config: {
       event_id: "event",
       team_number: 4418,
@@ -337,6 +337,7 @@ export async function setupOffline(page: Page) {
       .finally(() => hold?.finished());
   });
 
+  await options.beforeOpen?.({data, context});
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "Competition dashboard", exact: true }),

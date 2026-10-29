@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { TeamReports } from "./TeamReports";
 import { StatboticsComparison } from "../competition/StatboticsComparison";
 import "../competition/live-display.css";
-import type { Data, Profile } from "../model";
+import { canWork, type Data, type Profile } from "../model";
 import type { Competition, EventMatch } from "../competition/service";
 import { isStale } from "../competition/feed-state";
 import type { PitScope } from "../pit-rpc";
@@ -234,7 +234,7 @@ function ScoutingEvent({
     competition.context?.matches.filter(
       (m) => m.event_id === eventId && m.source === "manual" && !m.archived_at,
     ) || [];
-  const manager = !!s.context?.can_manage;
+  const manager = canWork(profile) && !!s.context?.can_manage;
   const submitted = s.outbox.find((o) => o.payload.id === submittedId);
   const exportBackup = () => {
     try {
@@ -1747,7 +1747,7 @@ function AssignmentForm({
                 .filter(
                   (p) =>
                     p.active &&
-                    ["student", "lead", "mentor", "admin"].includes(p.role),
+                    canWork(p),
                 )
                 .map((p) => (
                   <option key={p.id} value={p.id}>

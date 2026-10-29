@@ -116,7 +116,8 @@ export function CompetitionWorkspace({
   const practice = ops?.source === "manual";
   const completed = practice ? !!ops.finished_at : !!match?.completed;
   const practices = manualMatches(d.matches, true);
-  const canAddPractice = !!(d.can_manage && event && d.manual_matches_enabled);
+  const canManageCompetition = canWork(profile) && d.can_manage;
+  const canAddPractice = !!(canManageCompetition && event && d.manual_matches_enabled);
   const addNextPractice = () => {
     if (!canAddPractice || c.busy || c.readOnly) return;
     setSelected(null);
@@ -186,9 +187,9 @@ export function CompetitionWorkspace({
       )}
       {c.readOnly && (
         <p className="connection-stale" role="status">
-          Competition snapshot is read-only. Last loaded checklists:{" "}
+          {!canWork(profile) ? "Your account is read only. You can view competition records, but cannot change them." : "Competition snapshot is read-only."} Last loaded checklists:{" "}
           {c.contextAt ? new Date(c.contextAt).toLocaleString() : "Not loaded"}.
-          Refresh before making changes.
+          {canWork(profile) && "Refresh before making changes."}
         </p>
       )}
       {page === "dashboard" && canAddPractice && (
@@ -204,7 +205,7 @@ export function CompetitionWorkspace({
           d={d}
           data={data}
           profile={profile}
-          readOnly={c.readOnly}
+          readOnly={c.dataReadOnly}
           scheduleStale={
             !c.online ||
             !!c.feedError ||
@@ -479,7 +480,7 @@ export function CompetitionWorkspace({
             {!ops && (
               <>
                 <p>Start a local operations record for this match.</p>
-                {d.can_manage ? (
+                {canManageCompetition ? (
                   <button
                     className="primary"
                     disabled={c.busy || c.readOnly}
@@ -508,7 +509,7 @@ export function CompetitionWorkspace({
                     )}
                   </strong>
                 </p>
-                {d.can_manage && !ops.archived_at ? (
+                {canManageCompetition && !ops.archived_at ? (
                   <form
                     key={ops.version}
                     onSubmit={(e) => {
@@ -701,7 +702,7 @@ export function CompetitionWorkspace({
         <>
           <div className="comp-feed">
             <h2>Checklist templates</h2>
-            {d.can_manage && (
+            {canManageCompetition && (
               <button
                 disabled={c.busy || c.readOnly}
                 onClick={() =>
@@ -747,7 +748,7 @@ export function CompetitionWorkspace({
                   {t.items.length} items
                 </p>
                 <p>{t.description}</p>
-                {d.can_manage && (
+                {canManageCompetition && (
                   <>
                     <button
                       disabled={c.busy || c.readOnly}
@@ -815,7 +816,7 @@ export function CompetitionWorkspace({
           <h2>Event connection</h2>
           {!event ? (
             <p>Activate an event below before configuring its schedule.</p>
-          ) : d.can_manage ? (
+          ) : canManageCompetition ? (
             <form
               key={d.config?.version || 0}
               onSubmit={(e) => {

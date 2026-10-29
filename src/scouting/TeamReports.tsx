@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { Profile } from "../model";
+import { canWork, type Profile } from "../model";
 import { currentReports, type Observation } from "./model";
 import {
   filterReports,
@@ -225,10 +225,7 @@ export function TeamReports({
                 const correctable =
                   isCurrent &&
                   active &&
-                  profile.active &&
-                  ["student", "lead", "mentor", "admin"].includes(
-                    profile.role,
-                  ) &&
+                  canWork(profile) &&
                   (manager || originalScout(report) === profile.id);
                 return (
                   <article className="scout-report" key={report.id}>

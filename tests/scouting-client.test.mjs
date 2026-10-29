@@ -776,3 +776,10 @@ test("focus, visibility and timer refreshes are throttled and preserve unfinishe
     assert.equal(h.reads.length, 3, "offline focus does not read");
   } finally { await h.close(); }
 });
+
+test('Admin Lead can scout, but retained management callback cannot survive Readonly demotion',async()=>{
+ const h=harness();try{await h.ready();h.args.profile={...h.args.profile,role:'admin_lead'};h.render();h.flush();await h.settle();assert.equal(h.value.canScout,true);
+ const retained=h.value.manage;h.args.profile={...h.args.profile,role:'readonly'};h.render();h.flush();await h.settle();
+ assert.equal(h.value.canScout,false);assert.equal(await retained('assignment',{}),false);assert.equal(h.writes.length,0);
+ }finally{await h.close();}
+});

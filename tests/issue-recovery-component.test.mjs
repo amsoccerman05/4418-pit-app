@@ -10,6 +10,7 @@ import {
 } from "../src/issue-recovery.ts";
 import {
   canManage,
+  canWork,
   issueOwner,
   batteryReference,
   issueStatuses,
@@ -78,6 +79,7 @@ function component() {
     useState,
     React,
     canManage,
+  canWork,
     issueOwner,
     batteryReference,
     issueStatuses,
@@ -253,12 +255,14 @@ test("read-only recovery does not claim a save is still running", () => {
   assert.equal(f.button("Saving…").props.disabled, true);
 });
 
-async function saveFailure(error, { moved = false, expired = false } = {}) {
+async function saveFailure(error, { moved = false, expired = false, demoted = false } = {}) {
   const modal = { kind: "issue", id: "issue" },
     states = {};
   let calls = 0;
   const names = {
-    profile: { id: "me" },
+    profile: { id: "me", role:"lead", active:true },
+    latestProfile: { current: { id:"me", role:"lead", active:true } },
+    canWork,
     saving: { current: false },
     demo: false,
     pitReadOnly: false,
@@ -275,6 +279,7 @@ async function saveFailure(error, { moved = false, expired = false } = {}) {
       calls++;
       if (moved) names.modalIdentity.current = { kind: "issue", id: "other" };
       if (expired) names.accountRequests.current.abort();
+      if (demoted) names.latestProfile.current = {...names.latestProfile.current,role:"readonly"};
       throw error;
     },
     refresh: async () => {
@@ -345,3 +350,8 @@ test("late conflict cannot affect a newer editor or cleared account scope", asyn
   assert.equal(states.invalidated, true);
   assert.equal(states.conflict, undefined);
 });
+
+ test("same-identity permission loss releases in-flight lock without closing the draft",async()=>{
+ const {states,calls}=await saveFailure(new Error("Pit account changed."),{demoted:true});
+ assert.equal(calls,1);assert.equal(states.busy,false);assert.equal(states.closed,undefined);assert.equal(states.uncertain,true);
+ });
