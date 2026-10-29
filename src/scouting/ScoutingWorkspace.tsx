@@ -115,7 +115,7 @@ export function ScoutingWorkspace({
         <section className="card">
           <h2>Activate an event to scout</h2>
           <p>
-            A mentor or admin can create the event in Event. Scouting does not
+            A mentor can create the event in Event. Scouting does not
             need an official schedule.
           </p>
         </section>

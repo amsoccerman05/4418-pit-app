@@ -9,7 +9,7 @@ export function seed(): Data {
   const now = new Date().toISOString();
   const data = emptyData();
   data.profiles = (
-    ["readonly", "student", "lead", "admin_lead", "admin", "mentor"] as Role[]
+    ["readonly", "student", "lead", "admin_lead", "mentor"] as Role[]
   ).map(demoProfile);
   data.events = [
     {
@@ -20,7 +20,7 @@ export function seed(): Data {
       end_date: "2027-03-27",
       status: "active",
       notes: "",
-      created_by: "demo-admin",
+      created_by: "demo-mentor",
       created_at: now,
       updated_at: now,
     },

@@ -152,9 +152,9 @@ test('Admin Lead inherits Lead work but never Mentor/Admin; unknown/readonly/ina
  const {canWork,canManage,isAdmin,batteryStatusOptions}=await import('../src/model.ts');
  for(const role of ['student','lead','admin_lead','mentor','admin','readonly','guest']) {
   const p={role,active:true};
-  assert.equal(canWork(p),['student','lead','admin_lead','mentor','admin'].includes(role));
-  assert.equal(canManage(p),['lead','admin_lead','mentor','admin'].includes(role));
-  assert.equal(isAdmin(p),['mentor','admin'].includes(role));
+  assert.equal(canWork(p),['student','lead','admin_lead','mentor'].includes(role));
+  assert.equal(canManage(p),['lead','admin_lead','mentor'].includes(role));
+  assert.equal(isAdmin(p),['mentor'].includes(role));
   assert.equal(canWork({...p,active:false}),false);
   const flagged=batteryStatusOptions(p,{status:'FLAGGED',active:true});
   assert.equal(flagged.includes('READY'),canManage(p));

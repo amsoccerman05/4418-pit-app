@@ -26,5 +26,12 @@ test('Readonly retains issue view but cannot submit; permission restoration keep
  await emitAuth(page,null);await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByText('Retained issue draft')).toHaveCount(0);f.assertIsolated();
 });
 test('Student cannot act on retired battery and receives a clear explanation',async({page},info)=>{
- const f=await setupRole(page,'student',{status:'RETIRED'});await navigate(page,'Batteries');await page.getByRole('button',{name:'Details & history',exact:true}).click();const d=page.getByRole('dialog');await expect(d).toContainText('Only Mentors and Admins can restore');await expect(d.getByRole('button',{name:'Save battery activity'})).toHaveCount(0);await captureRole(page,info,'retired-readonly');f.assertIsolated();
+ const f=await setupRole(page,'student',{status:'RETIRED'});await navigate(page,'Batteries');await page.getByRole('button',{name:'Details & history',exact:true}).click();const d=page.getByRole('dialog');await expect(d).toContainText('Only Mentors can restore');await expect(d.getByRole('button',{name:'Save battery activity'})).toHaveCount(0);await captureRole(page,info,'retired-readonly');f.assertIsolated();
+});
+
+test('Mentor administration pauses on role loss without discarding an open draft',async({page},info)=>{
+ const f=await setupRole(page,'mentor',{canManage:true});await navigate(page,'Event');await page.getByRole('button',{name:'New event',exact:true}).click();const d=page.getByRole('dialog',{name:'Event details',exact:true});await d.getByLabel('Event name *',{exact:true}).fill('Retained event draft');
+ f.data.profiles[0].role='admin_lead';await page.evaluate(()=>(window as any).__offlineFixture.emitRealtime('profiles'));
+ await expect(d.getByRole('status')).toContainText('Mentor access is required');await expect(d.getByLabel('Event name *',{exact:true})).toHaveValue('Retained event draft');await expect(d.getByLabel('Event name *',{exact:true})).toBeDisabled();await expect(d.getByRole('button',{name:'Save event',exact:true})).toBeDisabled();expect(f.writes()).toHaveLength(0);await captureRole(page,info,'mentor-revoked-kept-draft');
+ f.data.profiles[0].role='mentor';await page.evaluate(()=>(window as any).__offlineFixture.emitRealtime('profiles'));await expect(d.getByLabel('Event name *',{exact:true})).toBeEnabled();await expect(d.getByLabel('Event name *',{exact:true})).toHaveValue('Retained event draft');expect(f.writes()).toHaveLength(0);await d.getByRole('button',{name:'Close dialog',exact:true}).click();f.assertIsolated();
 });

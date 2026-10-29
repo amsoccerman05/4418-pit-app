@@ -81,7 +81,7 @@ test("crew guide is a collapsed native disclosure with honest battery and physic
     "stays current until leadership finishes",
     "The battery list may be incomplete.",
     "physical label and status",
-    "ask a mentor or admin to add it",
+    "ask a mentor to add it",
     "Assigning a battery does not install it.",
     "Finishing a practice does not check off items or remove the battery.",
   ]) {
@@ -178,7 +178,7 @@ test("no active event guides setup instead of opening stale preparation or issue
   assert.deepEqual(props.calls, [["go", "admin"]]);
   props.profile.role = "lead";
   assert.ok(
-    render(props).includes("Ask a mentor or admin to activate an event"),
+    render(props).includes("Ask a mentor to activate an event"),
   );
 });
 

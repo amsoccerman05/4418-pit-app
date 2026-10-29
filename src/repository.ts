@@ -56,6 +56,7 @@ export async function mutate(
   scope?:PitScope,
 ): Promise<void> {
   if (!canWork(profile)) throw new Error("View-only account.");
+  if (["save_event", "activate_event", "save_battery"].includes(action) && !isAdmin(profile)) throw new Error("Mentor access required.");
   if (!demo) {
     if(!scope)throw new Error('Pit account scope required.');
     const { error } = await scopedPitRpc(`pit_${action}`,{p},scope);
@@ -177,7 +178,7 @@ export async function mutate(
       throw new Error("Battery status changed. Refresh and try again.");
     if (!b.active || b.status === "RETIRED" || p.status === "RETIRED") {
       if (!isAdmin(profile))
-        throw new Error("Admin access required for retired batteries.");
+        throw new Error("Mentor access required for retired batteries.");
     }
     if (b.status === "FLAGGED" && !canManage(profile) && p.status !== "FLAGGED")
       throw new Error("A lead must release a flagged battery.");
@@ -190,7 +191,7 @@ export async function mutate(
     b.status = p.status as Battery["status"];
     b.updated_at = now;
   } else if (action === "save_event") {
-    if (!isAdmin(profile)) throw new Error("Admin access required.");
+    if (!isAdmin(profile)) throw new Error("Mentor access required.");
     const existing = d.events.find((e) => e.id === p.id);
     if (existing) Object.assign(existing, p, { updated_at: now });
     else
@@ -207,13 +208,13 @@ export async function mutate(
         updated_at: now,
       });
   } else if (action === "activate_event") {
-    if (!isAdmin(profile)) throw new Error("Admin access required.");
+    if (!isAdmin(profile)) throw new Error("Mentor access required.");
     d.events.forEach((e) => {
       if (e.status === "active") e.status = "completed";
       if (e.id === p.id) e.status = "active";
     });
   } else if (action === "save_battery") {
-    if (!isAdmin(profile)) throw new Error("Admin access required.");
+    if (!isAdmin(profile)) throw new Error("Mentor access required.");
     if (
       d.batteries.some(
         (b) =>

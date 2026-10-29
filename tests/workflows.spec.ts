@@ -180,12 +180,12 @@ for (const width of [390, 768, 1280, 1440])
       fullPage: true,
     });
   });
-test("admin manages events and batteries; completed issues stay accessible", async ({
+test("Mentor manages events and batteries; completed issues stay accessible", async ({
   page,
 }) => {
   await demo(page);
   await report(page, "Historical issue", "LOW");
-  await role(page, "admin");
+  await role(page, "mentor");
   await nav(page, "Event");
   await page.getByRole("button", { name: "New event" }).click();
   await page.getByLabel("Event name *").fill("Next regional");
@@ -220,7 +220,7 @@ test("battery header respects management permissions and simple actions stay one
 }) => {
   await demo(page);
   await nav(page, "Batteries");
-  for (const r of ["student", "lead", "readonly"]) {
+  for (const r of ["student", "lead", "admin_lead", "readonly"]) {
     await role(page, r);
     await expect(
       page.getByRole("button", { name: "Add battery", exact: true }),
@@ -229,7 +229,7 @@ test("battery header respects management permissions and simple actions stay one
       page.getByRole("button", { name: "Report issue", exact: true }),
     ).toHaveCount(0);
   }
-  for (const r of ["admin", "mentor"]) {
+  for (const r of ["mentor"]) {
     await role(page, r);
     await expect(
       page
@@ -302,3 +302,5 @@ for (const [status, match] of [
       page.getByRole("dialog").getByText(`Match: ${match}`, { exact: true }),
     ).toBeVisible();
   });
+
+test('demo offers exactly five canonical account roles, not Owner Admin',async({page},info)=>{await demo(page);const options=page.getByLabel('Demo role').locator('option');expect(await options.evaluateAll(nodes=>nodes.map(n=>(n as HTMLOptionElement).value))).toEqual(['readonly','student','lead','admin_lead','mentor']);await role(page,'admin_lead');await nav(page,'Batteries');await expect(page.getByRole('button',{name:'Add battery',exact:true})).toHaveCount(0);await page.screenshot({path:info.outputPath('canonical-five-role-admin-lead.png'),fullPage:true});});

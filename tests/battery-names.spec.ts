@@ -203,7 +203,7 @@ test("new batteries use names and generated references while renaming preserves 
   page,
 }) => {
   await setupNamedDemo(page);
-  await page.getByLabel("Demo role").selectOption("admin");
+  await page.getByLabel("Demo role").selectOption("mentor");
   await nav(page, "Batteries");
   await page.getByRole("button", { name: "Add battery", exact: true }).click();
   await expect(
@@ -280,7 +280,7 @@ test("an open new-battery form retains its reference until explicit collision re
   page,
 }) => {
   await setupNamedDemo(page);
-  await page.getByLabel("Demo role").selectOption("admin");
+  await page.getByLabel("Demo role").selectOption("mentor");
   await nav(page, "Batteries");
   await page.getByRole("button", { name: "Add battery", exact: true }).click();
   await page

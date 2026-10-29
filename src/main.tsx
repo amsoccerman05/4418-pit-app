@@ -303,7 +303,7 @@ function App() {
       const d = demo ? readDemo() : await fetchData(signal);
       if (!current()) return false;
       const p = demo ? demoProfile(role) : d.profiles.find((p) => p.id === userId && p.active);
-      if (!p) {invalidateAccess('Your account needs an active Team 4418 profile. Ask a mentor or admin.');return false;}
+      if (!p) {invalidateAccess('Your account needs an active Team 4418 profile. Ask a mentor.');return false;}
       setProfile(p);setData(d);setLastSync(new Date().toLocaleTimeString());setLastSyncAt(Date.now());setClockNow(Date.now());setDataReadError('');if(reviewAfterSave)setUncertainSave(false);
       return true;
     } catch (e) {
@@ -374,12 +374,14 @@ function App() {
     close = true,
   ) {
     if (!profile || !latestProfile.current || !canWork(latestProfile.current) || saving.current) return false;
+    const staffAction=["save_event","activate_event","save_battery"].includes(action);
+    if(staffAction&&!isAdmin(latestProfile.current)){setError("Mentor access is required. Your draft has not been saved.");return false;}
     if(!demo&&(pitReadOnly||offlineNow()||!accessCurrent())){setError('Read-only. Refresh your connection before saving.');return false;}
     const savedModal=modalIdentity.current,savedHash=location.hash,signal=accountRequests.current.signal;
     const current=()=>appLive.current&&!signal.aborted&&accessCurrent();
     saving.current=true;setBusy(true);setError('');setNotice('');
     try {
-      await mutate(demo, profile, action, p,{actorId:profile.id,signal,isCurrent:()=>current()&&!!latestProfile.current&&canWork(latestProfile.current)});
+      await mutate(demo, profile, action, p,{actorId:profile.id,signal,isCurrent:()=>current()&&!!latestProfile.current&&canWork(latestProfile.current)&&(!staffAction||isAdmin(latestProfile.current))});
       if(!current())return false;
       const refreshed=await refresh(false,true);
       if(!current())return false;
@@ -556,7 +558,7 @@ function App() {
                 value={role}
                 onChange={(e) => setRole(e.target.value as Role)}
               >
-                {["readonly", "student", "lead", "admin_lead", "admin", "mentor"].map((r) => (
+                {["readonly", "student", "lead", "admin_lead", "mentor"].map((r) => (
                   <option key={r} value={r}>{roleLabel(r as Role)}</option>
                 ))}
               </select>
@@ -658,7 +660,7 @@ function App() {
               </>
             ) : (
               <span className="muted">
-                A mentor or admin can create and activate an event.
+                A mentor can create and activate an event.
               </span>
             )}
           </div>}
@@ -1057,7 +1059,7 @@ function App() {
               </div>
               {!data.batteries.length && (
                 <div className="empty">
-                  A mentor or admin can add the competition batteries.
+                  A mentor can add the competition batteries.
                 </div>
               )}
             </>
@@ -1216,16 +1218,16 @@ function App() {
               }}
             />
           )}{" "}
-          {modal.kind === "event" && (
-            <EventForm
-              event={data.events.find((e) => e.id === modal.id)}
-              busy={writeBusy}
-              submit={(p) => save("save_event", p)}
-            />
-          )}{" "}
-          {modal.kind === "newBattery" && (
-            <BatteryForm batteries={data.batteries} busy={writeBusy} submit={(p) => save("save_battery", p)} />
-          )}
+          {(modal.kind === "event" || modal.kind === "newBattery") && <>
+            {!isAdmin(profile) && <p role="status">Mentor access is required. Your draft is kept here, but cannot be saved.</p>}
+            <fieldset disabled={!isAdmin(profile)} style={{border:0,padding:0,minWidth:0}}>
+              {modal.kind === "event" ? <EventForm
+                event={data.events.find((e) => e.id === modal.id)}
+                busy={writeBusy}
+                submit={(p) => save("save_event", p)}
+              /> : <BatteryForm batteries={data.batteries} busy={writeBusy} submit={(p) => save("save_battery", p)} />}
+            </fieldset>
+          </>}
         </Dialog>
       )}
     </>
@@ -1698,7 +1700,7 @@ function IssueDetail({
           </div>
         ) : (
           <p className="form-help">
-            A lead, mentor, or admin can update this issue.
+            A Lead, Admin Lead, or Mentor can update this issue.
           </p>
         )}
       </form>
@@ -1920,7 +1922,7 @@ function BatteryDetail({
         )}
         {b.notes && <p>{b.notes}</p>}
       </div>
-      {b.active && b.status === "RETIRED" && !isAdmin(profile) && <p>Only Mentors and Admins can restore or record activity for a retired battery.</p>}
+      {b.active && b.status === "RETIRED" && !isAdmin(profile) && <p>Only Mentors can restore or record activity for a retired battery.</p>}
       {statusOptions.length > 0 && (
         <form
           onSubmit={async (e) => {
@@ -1991,8 +1993,7 @@ function BatteryDetail({
           </Field>
           <p className="form-help">
             Voltage is recorded for reference; it does not determine battery
-            health. A Lead or Admin Lead must release flagged batteries. Only Admins and
-            Mentors can retire batteries.
+            health. A Lead or Admin Lead must release flagged batteries. Only Mentors can retire batteries.
             {b.status === "FLAGGED" && !canManage(profile) && " You may record a measurement while this battery remains FLAGGED."}
           </p>
           <div className="form-actions">

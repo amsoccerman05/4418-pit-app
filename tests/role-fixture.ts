@@ -1,7 +1,7 @@
 import {expect,type Page,type TestInfo} from '@playwright/test';
 import {existsSync,statSync} from 'node:fs';import path from 'node:path';
 import {setupOffline} from './offline-fixture';
-export type Role='admin_lead'|'lead'|'student'|'readonly';
+export type Role='admin_lead'|'lead'|'student'|'readonly'|'mentor';
 /** Existing dev/source harness, synthetic only; NOT released-artifact evidence. */
 export async function setupRole(page:Page,role:Role,{canManage=false,status='FLAGGED'}:{canManage?:boolean;status?:string}={}){
  if(process.env.HANDOFF_LIVE)throw Error('Live mode is forbidden for synthetic role tests');
