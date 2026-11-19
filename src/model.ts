@@ -28,7 +28,7 @@ export const batteryStatuses = [
   "FLAGGED",
   "RETIRED",
 ] as const;
-export type Role = "readonly" | "student" | "lead" | "admin_lead" | "admin" | "mentor";
+export type Role = "readonly" | "student" | "project_lead" | "lead" | "admin_lead" | "admin" | "mentor";
 export type Profile = {
   id: string;
   display_name: string;
@@ -108,7 +108,7 @@ export type Data = {
   issueEvents: IssueEvent[];
   profiles: Profile[];
 };
-export const canWork = (p: Profile) => p.active && ["student", "lead", "admin_lead", "admin", "mentor"].includes(p.role);
+export const canWork = (p: Profile) => p.active && ["student", "project_lead", "lead", "admin_lead", "admin", "mentor"].includes(p.role);
 export const canManage = (p: Profile) =>
   p.active && ["lead", "admin_lead", "admin", "mentor"].includes(p.role);
 export const isAdmin = (p: Profile) =>
@@ -120,7 +120,7 @@ export function batteryStatusOptions(p: Profile, b: Pick<Battery, "status" | "ac
   if (b.status === "FLAGGED" && !canManage(p)) return ["FLAGGED"];
   return batteryStatuses.filter(status => status !== "RETIRED" || isAdmin(p));
 }
-export const roleLabel = (role: Role) => role === "admin_lead" ? "Admin Lead" : role === "readonly" ? "Read only" : role;
+export const roleLabel = (role: Role) => role === "project_lead" ? "Project Lead" : role === "admin_lead" ? "Admin Lead" : role === "readonly" ? "Read only" : role;
 // Deferred remains unresolved, including HIGH / ROBOT DOWN safety blockers.
 export const unresolved = (i: Issue) => i.status !== "RESOLVED";
 // A missing profile must not turn an existing assignment into an unassigned issue.
